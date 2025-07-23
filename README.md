@@ -1,3 +1,4 @@
+
 # CV Anonymizer
 
 This project is a Python script that automates the process of anonymizing CVs. It takes a CV in PDF format as input, extracts the relevant information, anonymizes the personal data, and generates a new CV in DOCX format.
@@ -92,4 +93,3 @@ The current implementation has a few limitations:
 *   **Section Extraction:** The section extraction is based on a simple keyword-matching approach and may not be accurate for all CVs.
 *   **Language:** The script is currently configured to work with French CVs. To use it with other languages, you will need to download the appropriate spaCy model and Tesseract language pack.
 *   **File Formats:** The script currently only supports PDF files as input.
-```
