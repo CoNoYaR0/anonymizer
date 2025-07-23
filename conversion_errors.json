@@ -1,0 +1,6 @@
+[
+    {
+        "file": "templates/Dossier_de_competences_KOUKA_JTA.doc",
+        "error": "Command '['unoconv', '-f', 'docx', '-o', 'templates', 'templates/Dossier_de_competences_KOUKA_JTA.doc']' returned non-zero exit status 1."
+    }
+]
