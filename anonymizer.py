@@ -3,6 +3,10 @@ import json
 import re
 import spacy
 from docx import Document
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load the French spaCy model
 nlp = spacy.load("fr_core_news_md")
@@ -11,11 +15,14 @@ def extract_text_from_docx(docx_path):
     """
     Extracts text from a DOCX file using python-docx.
     """
+    logging.info(f"Attempting to extract text from: {docx_path}")
     try:
         doc = Document(docx_path)
         text = '\n'.join([p.text for p in doc.paragraphs])
+        logging.info("Successfully extracted text from DOCX file.")
         return text
     except Exception as e:
+        logging.error(f"Error extracting text from DOCX: {e}")
         return f"Error extracting text from DOCX: {e}"
 
 def extract_contact_info(text):
