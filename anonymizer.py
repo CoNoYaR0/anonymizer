@@ -108,7 +108,7 @@ def main():
     """
     # File paths
     pdf_path = "uploads/CV Jebrane TABANA 2025 (Ingénieur Senior QA-Test Lead).pdf"
-    template_path = "templates/template_cv.docx"
+    template_path = os.path.abspath("templates/template_cv.docx")
     output_dir = "outputs"
 
     # Create output directory if it doesn't exist
