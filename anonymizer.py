@@ -2,26 +2,30 @@ import os
 import json
 import re
 import spacy
-from PIL import Image
-import pytesseract
-from docx import Document
-from pdf2image import convert_from_path
+import platform
 
 # Load the French spaCy model
 nlp = spacy.load("fr_core_news_md")
 
-def extract_text_from_pdf(pdf_path):
+def extract_text_from_doc(doc_path):
     """
-    Extracts text from a PDF file using Tesseract OCR.
+    Extracts text from a DOC file using win32com.
     """
+    if platform.system() != "Windows":
+        return "This function can only be run on Windows."
+
+    import win32com.client
+
     try:
-        images = convert_from_path(pdf_path)
-        text = ""
-        for image in images:
-            text += pytesseract.image_to_string(image, lang='fra')
+        word = win32com.client.Dispatch("Word.Application")
+        word.visible = False
+        doc = word.Documents.Open(doc_path)
+        text = doc.Content.Text
+        doc.Close()
+        word.Quit()
         return text
     except Exception as e:
-        return f"Error extracting text from PDF: {e}"
+        return f"Error extracting text from DOC: {e}"
 
 def extract_contact_info(text):
     """
@@ -81,25 +85,29 @@ def extract_sections(text):
 
     return sections
 
-def create_docx(template_path, output_path, data):
+def create_doc(output_path, data):
     """
-    Creates a DOCX file from a template and fills it with the provided data.
+    Creates a DOC file with the provided data.
     """
+    if platform.system() != "Windows":
+        return "This function can only be run on Windows."
+
+    import win32com.client
+
     try:
-        doc = Document(template_path)
-        for p in doc.paragraphs:
-            for key, value in data.items():
-                if f"{{{{{key}}}}}" in p.text:
-                    inline = p.runs
-                    # Replace strings and retain formatting
-                    for i in range(len(inline)):
-                        if f"{{{{{key}}}}}" in inline[i].text:
-                            text = inline[i].text.replace(f"{{{{{key}}}}}", str(value))
-                            inline[i].text = text
-        doc.save(output_path)
+        word = win32com.client.Dispatch("Word.Application")
+        word.visible = False
+        doc = word.Documents.Add()
+
+        for key, value in data.items():
+            doc.Content.InsertAfter(f"{key}: {value}\n")
+
+        doc.SaveAs(output_path)
+        doc.Close()
+        word.Quit()
         return True
     except Exception as e:
-        print(f"Error creating DOCX: {e}")
+        print(f"Error creating DOC: {e}")
         return False
 
 def main():
@@ -107,17 +115,16 @@ def main():
     Main function to run the anonymization process.
     """
     # File paths
-    pdf_path = "uploads/CV Jebrane TABANA 2025 (Ingénieur Senior QA-Test Lead).pdf"
-    template_path = os.path.abspath("templates/template_cv.docx")
+    doc_path = os.path.abspath("templates/Dossier_de_competences_KOUKA_JTA.doc")
     output_dir = "outputs"
 
     # Create output directory if it doesn't exist
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # 1. Extract text from PDF
-    text = extract_text_from_pdf(pdf_path)
-    if text.startswith("Error"):
+    # 1. Extract text from DOC
+    text = extract_text_from_doc(doc_path)
+    if text.startswith("Error") or text.startswith("This function"):
         print(text)
         return
 
@@ -147,11 +154,11 @@ def main():
     with open(json_output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-    # 5. Create DOCX
-    docx_output_path = os.path.join(output_dir, f"anonymized_cv_{candidate_id}.docx")
+    # 5. Create DOC
+    doc_output_path = os.path.join(output_dir, f"anonymized_cv_{candidate_id}.doc")
 
-    # Data for the docx template
-    docx_data = {
+    # Data for the doc
+    doc_data = {
         "candidate_id": candidate_id,
         "email": "email_001@example.com",
         "phone": "phone_001",
@@ -161,8 +168,8 @@ def main():
         "technologies": "\n".join(sections["technologies"]),
     }
 
-    if not create_docx(template_path, docx_output_path, docx_data):
-        print("Failed to create DOCX file.")
+    if not create_doc(doc_output_path, doc_data):
+        print("Failed to create DOC file.")
 
     # Report missing fields
     errors = []
