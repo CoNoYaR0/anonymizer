@@ -25,8 +25,13 @@ def extract_text_from_doc(doc_path):
     try:
         word = win32com.client.Dispatch("Word.Application")
         word.visible = False
-        logging.info(f"Opening Word document at: {doc_path}")
-        doc = word.Documents.Open(doc_path)
+
+        # Change the current working directory to the directory of the doc file
+        dir_path = os.path.dirname(doc_path)
+        os.chdir(dir_path)
+
+        logging.info(f"Opening Word document: {os.path.basename(doc_path)}")
+        doc = word.Documents.Open(os.path.basename(doc_path))
         text = doc.Content.Text
         doc.Close()
         word.Quit()
