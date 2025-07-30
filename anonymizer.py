@@ -124,7 +124,8 @@ def main():
     Main function to run the anonymization process.
     """
     # File paths
-    doc_path = "templates/Dossier_de_competences_KOUKA_JTA.doc"
+    doc_path = os.path.abspath("templates/Dossier_de_competences_KOUKA_JTA.doc")
+    logging.info(f"Absolute path to DOC file: {doc_path}")
     output_dir = "outputs"
 
     # Create output directory if it doesn't exist
