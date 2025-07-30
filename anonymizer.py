@@ -3,6 +3,10 @@ import json
 import re
 import spacy
 import platform
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Load the French spaCy model
 nlp = spacy.load("fr_core_news_md")
@@ -11,7 +15,9 @@ def extract_text_from_doc(doc_path):
     """
     Extracts text from a DOC file using win32com.
     """
+    logging.info(f"Attempting to extract text from: {doc_path}")
     if platform.system() != "Windows":
+        logging.error("This function can only be run on Windows.")
         return "This function can only be run on Windows."
 
     import win32com.client
@@ -19,12 +25,15 @@ def extract_text_from_doc(doc_path):
     try:
         word = win32com.client.Dispatch("Word.Application")
         word.visible = False
+        logging.info(f"Opening Word document at: {doc_path}")
         doc = word.Documents.Open(doc_path)
         text = doc.Content.Text
         doc.Close()
         word.Quit()
+        logging.info("Successfully extracted text from DOC file.")
         return text
     except Exception as e:
+        logging.error(f"Error extracting text from DOC: {e}")
         return f"Error extracting text from DOC: {e}"
 
 def extract_contact_info(text):
