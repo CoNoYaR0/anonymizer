@@ -46,13 +46,13 @@ app = FastAPI(title="CV Anonymizer API")
 
 # Supabase configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 
-if not SUPABASE_URL or not SUPABASE_KEY:
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
     print("Warning: Supabase credentials not found. Supabase integration will be disabled.")
     supabase: Client | None = None
 else:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 @app.get("/")
 def read_root():

@@ -54,10 +54,10 @@ Create a file named `.env` in the root of the project directory and add the foll
 
 ```
 SUPABASE_URL="YOUR_SUPABASE_URL"
-SUPABASE_KEY="YOUR_SUPABASE_ANON_KEY"
+SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
 ```
 
-Replace `"YOUR_SUPABASE_URL"` and `"YOUR_SUPABASE_ANON_KEY"` with your actual Supabase project URL and public anon key. See the [Configuration (Supabase)](#configuration-supabase) section for details on how to get these.
+Replace `"YOUR_SUPABASE_URL"` and `"YOUR_SUPABASE_ANON_KEY"` with your actual Supabase project URL and public `anon` key. See the [Configuration (Supabase)](#configuration-supabase) section for details on how to get these.
 
 **Note:** If you run the application without this file, the Supabase integration will be disabled. The API will still work, but no files will be saved.
 
