@@ -35,8 +35,9 @@ As of now, we have successfully completed the core backend functionality as outl
 *   ✅ **Phase 1: MVP Technique** - OCR and NER pipeline is in place.
 *   ✅ **Phase 2: Anonymisation et génération document** - Anonymization logic and `.docx` generation are functional.
 *   ✅ **Database Schema:** SQL migrations are ready for database initialization.
-*   ✅ **API Monitoring:** A `/status` endpoint provides resource metrics.
-*   ✅ **API Documentation:** Interactive documentation is automatically available.
+*   **API Monitoring:** A `/status` endpoint provides resource metrics for the application process.
+*   **API Documentation:** Interactive documentation is automatically available via Swagger UI (`/docs`).
+*   **API Workflow Refactor:** The anonymization process was refactored into a cleaner, two-step, ID-based workflow (`/upload` followed by `/anonymize/{id}`).
 
 ### To Be Done (Next Steps):
 
