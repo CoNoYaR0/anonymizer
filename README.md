@@ -12,7 +12,7 @@ Objectif : Tester l’extraction OCR et NER sur un fichier PDF
 •	Extraction simple avec spaCy FR (nom, contact, expériences, compétences)
 •	Stockage temporaire sur Supabase Storage/Postgres
 Prompt Jules :
-# Repo : “cv-anonymizer-backend”
+# Repo : “anonymizer”
 - Installer FastAPI, Tesseract, spaCy (fr_core_news_md)
 - Endpoint POST /upload pour recevoir un PDF
 - Stocker fichier sur Supabase Storage
@@ -27,7 +27,7 @@ Objectif : Transformer le JSON extrait en document anonymisé (HTML → DOCX)
 •	Générer fichier DOCX depuis HTML ou directement via python-docx
 •	Téléchargement via frontend minimal
 Prompt Jules :
-# Repo : “cv-anonymizer-backend”
+# Repo : “anonymizer”
 - Créer fonction anonymisation (initiales nom, placeholders mails/tel)
 - Créer route POST /anonymize qui reçoit JSON brut, retourne HTML anonymisé
 - Générer DOCX anonymisé via python-docx
@@ -41,7 +41,7 @@ Objectif : Créer UI complète : comptes clients, historique des CV, gestion des
 •	Tableau de bord utilisateur : uploads, historique
 •	Upload de templates personnalisés par utilisateur
 Prompt Jules :
-# Repo : “cv-anonymizer-frontend”
+# Repo : “anonymizer”
 - Configurer React/Tailwind sur Netlify avec Supabase Auth
 - Créer UI upload CV (drag & drop)
 - Ajouter historique téléchargements utilisateurs
@@ -54,7 +54,7 @@ Objectif : Améliorer l’extraction avec un LLM open-source gratuit (Mistral) h
 •	Utiliser Hugging Face inference API gratuite (ex. Mistral 7B)
 •	Stocker résultat affiné dans Supabase
 Prompt Jules :
-# Repo : “cv-anonymizer-backend”
+# Repo : “anonymizer”
 - Ajouter call API Hugging Face inference (Mistral-7B) après extraction spaCy
 - Prompt LLM pour extraire/structurer précisément expériences/compétences/technologies
 - Gérer fallback en cas de downtime API Hugging Face
@@ -69,7 +69,7 @@ Objectif : Sécuriser et scaler l’app en prod réelle
 •	Backup régulier Supabase
 •	RGPD : logs accès, purge automatique CV après X jours
 Prompt Jules :
-# Repo : “cv-anonymizer-backend”
+# Repo : “anonymizer”
 - Ajouter CI/CD GitHub Actions (tests, linting, déploiement Render auto)
 - Mettre en place monitoring et alertes basiques (Render)
 - Programmer tâche périodique pour purge automatique CV et JSON (>30 jours)
