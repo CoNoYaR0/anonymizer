@@ -1,95 +1,87 @@
-# CV Anonymizer
+Plan complet pour le projet CV Anonymizer (copier-coller dans Jules)
+🎯 Objectif général
+Créer une plateforme web pour anonymiser automatiquement des CV, destinés aux sociétés de consulting,
+afin de masquer toute information personnelle en conservant uniquement compétences, expériences, diplômes, et technologies.
+________________________________________
+📌 Phases de développement (fragmentées pour test progressif)
+Phase 1 : MVP Technique (OCR → JSON brut)
+Objectif : Tester l’extraction OCR et NER sur un fichier PDF
+•	Frontend minimal (upload uniquement, React sur Netlify)
+•	Backend API (FastAPI Python sur Render)
+•	OCR avec Tesseract (PDF vers texte brut)
+•	Extraction simple avec spaCy FR (nom, contact, expériences, compétences)
+•	Stockage temporaire sur Supabase Storage/Postgres
+Prompt Jules :
+# Repo : “cv-anonymizer-backend”
+- Installer FastAPI, Tesseract, spaCy (fr_core_news_md)
+- Endpoint POST /upload pour recevoir un PDF
+- Stocker fichier sur Supabase Storage
+- Convertir PDF vers texte brut avec Tesseract
+- Extraire NER (spaCy FR) et regex mail/tel, retourner JSON basique structuré.
+- Stocker résultat extraction JSON dans Supabase DB
+________________________________________
+Phase 2 : Anonymisation et génération document
+Objectif : Transformer le JSON extrait en document anonymisé (HTML → DOCX)
+•	Anonymisation : pseudonymiser noms (initiales), placeholder contacts
+•	Injection JSON dans un template HTML simple (avec Jinja2)
+•	Générer fichier DOCX depuis HTML ou directement via python-docx
+•	Téléchargement via frontend minimal
+Prompt Jules :
+# Repo : “cv-anonymizer-backend”
+- Créer fonction anonymisation (initiales nom, placeholders mails/tel)
+- Créer route POST /anonymize qui reçoit JSON brut, retourne HTML anonymisé
+- Générer DOCX anonymisé via python-docx
+- Stocker DOCX sur Supabase Storage
+- Générer lien téléchargement sécurisé (expire après 24h)
+________________________________________
+Phase 3 : Frontend avancé et gestion utilisateur
+Objectif : Créer UI complète : comptes clients, historique des CV, gestion des templates HTML
+•	React + Tailwind CSS (Netlify)
+•	Authentification via Supabase Auth (compte client)
+•	Tableau de bord utilisateur : uploads, historique
+•	Upload de templates personnalisés par utilisateur
+Prompt Jules :
+# Repo : “cv-anonymizer-frontend”
+- Configurer React/Tailwind sur Netlify avec Supabase Auth
+- Créer UI upload CV (drag & drop)
+- Ajouter historique téléchargements utilisateurs
+- Permettre upload personnalisé template HTML
+- Interactions via API Render FastAPI backend
+________________________________________
+Phase 4 : Intégration d’un LLM open-source pour affiner l’extraction
+Objectif : Améliorer l’extraction avec un LLM open-source gratuit (Mistral) hébergé sur Hugging Face
+•	Affiner extraction données (compétences complexes, technologies)
+•	Utiliser Hugging Face inference API gratuite (ex. Mistral 7B)
+•	Stocker résultat affiné dans Supabase
+Prompt Jules :
+# Repo : “cv-anonymizer-backend”
+- Ajouter call API Hugging Face inference (Mistral-7B) après extraction spaCy
+- Prompt LLM pour extraire/structurer précisément expériences/compétences/technologies
+- Gérer fallback en cas de downtime API Hugging Face
+- Stocker réponse JSON affiné dans Supabase DB
+Gratuit au départ : Hugging Face free inference API (limité mais suffisant au début).
+Passage payant ensuite : Hugging Face Pro ($9/mois) ou OpenAI GPT-4 (~$0.03/1000 tokens).
+________________________________________
+Phase 5 : Passage en production sécurisée
+Objectif : Sécuriser et scaler l’app en prod réelle
+•	CI/CD via GitHub Actions
+•	Surveillance/monitoring Render
+•	Backup régulier Supabase
+•	RGPD : logs accès, purge automatique CV après X jours
+Prompt Jules :
+# Repo : “cv-anonymizer-backend”
+- Ajouter CI/CD GitHub Actions (tests, linting, déploiement Render auto)
+- Mettre en place monitoring et alertes basiques (Render)
+- Programmer tâche périodique pour purge automatique CV et JSON (>30 jours)
+- Enregistrer logs accès anonymisés dans Supabase pour audit RGPD
+________________________________________
+🌐 Workflow Tech global
+Frontend (Netlify) ↔ Backend API (Render) ↔ Supabase (DB+Storage)
+⚙️ Stack finale retenue :
+•	Frontend : React, Tailwind (Netlify)
+•	Backend : FastAPI Python (Render)
+•	OCR : Tesseract + Poppler
+•	Extraction : spaCy FR + HuggingFace LLM (Mistral gratuit puis GPT-4 payant)
+•	DB & Storage : Supabase (Postgres+Storage+Auth)
+•	Templating : HTML → DOCX via python-docx/Jinja2
 
-This project is a Python script that automates the process of anonymizing CVs. It takes a CV in PDF format as input, extracts the relevant information, anonymizes the personal data, and generates a new CV in DOCX format.
-
-## How it works
-
-The script uses a combination of Optical Character Recognition (OCR), Natural Language Processing (NLP), and regular expressions to extract and anonymize the information from the CV.
-
-Here's a step-by-step breakdown of the process:
-
-1.  **PDF to Text:** The script first converts the input PDF file into plain text using Tesseract OCR. This is done by first converting each page of the PDF into an image and then running OCR on each image.
-2.  **Information Extraction:** The script then uses a combination of NLP and regular expressions to extract the following information from the text:
-    *   **Name:** The script uses spaCy's Named Entity Recognition (NER) to identify the candidate's name.
-    *   **Email and Phone Number:** The script uses regular expressions to find the email address and phone number.
-    *   **Sections:** The script uses a keyword-based approach to identify the main sections of the CV, such as "Experiences," "Competencies," "Education," and "Technologies."
-3.  **Anonymization:** Once the personal information has been extracted, the script anonymizes it as follows:
-    *   **Name:** The candidate's name is replaced with their initials (e.g., "John Doe" becomes "JD").
-    *   **Email and Phone Number:** The email and phone number are replaced with placeholders (e.g., "email_001@example.com" and "phone_001").
-4.  **Output Generation:** Finally, the script generates two output files:
-    *   **JSON file:** A JSON file containing the extracted and anonymized data.
-    *   **DOCX file:** A new CV in DOCX format, created from a template and populated with the anonymized data.
-
-## How to use
-
-To use the script, you need to have Python 3.10 or higher installed, as well as the following dependencies:
-
-*   `spacy`
-*   `python-docx`
-*   `pytesseract`
-*   `pdf2image`
-*   `Pillow`
-*   `tesseract`
-*   `poppler`
-
-You can install the Python dependencies using pip:
-
-```
-pip install spacy python-docx pytesseract pdf2image Pillow
-```
-
-You will also need to download the French spaCy model:
-
-```
-python -m spacy download fr_core_news_md
-```
-
-Finally, you will need to install Tesseract and Poppler. The installation process for these dependencies will vary depending on your operating system.
-
-**On Debian-based Linux distributions (such as Ubuntu), you can install them using the following commands:**
-
-```
-sudo apt-get update
-sudo apt-get install -y tesseract-ocr tesseract-ocr-fra poppler-utils
-```
-
-Once you have installed all the dependencies, you can run the script from the command line:
-
-```
-python anonymizer.py
-```
-
-The script will process the CV located at `uploads/CV Jebrane TABANA 2025 (Ingénieur Senior QA-Test Lead).pdf` and generate the anonymized output files in the `outputs` directory.
-
-## Project Structure
-
-```
-.
-├── anonymizer.py
-├── outputs
-│   ├── anonymized_cv_P.docx
-│   └── anonymized_cv_P.json
-├── Project Overview.md
-├── README.md
-├── templates
-│   ├── Dossier_de_competences_KOUKA_JTA.doc
-│   └── template_cv.docx
-└── uploads
-    └── CV Jebrane TABANA 2025 (Ingénieur Senior QA-Test Lead).pdf
-```
-
-*   `anonymizer.py`: The main Python script.
-*   `outputs`: This directory contains the anonymized output files.
-*   `Project Overview.md`: A Markdown file containing a high-level overview of the project.
-*   `README.md`: This file.
-*   `templates`: This directory contains the template files for the output CV.
-*   `uploads`: This directory contains the input CVs.
-
-## Limitations
-
-The current implementation has a few limitations:
-
-*   **Section Extraction:** The section extraction is based on a simple keyword-matching approach and may not be accurate for all CVs.
-*   **Language:** The script is currently configured to work with French CVs. To use it with other languages, you will need to download the appropriate spaCy model and Tesseract language pack.
-*   **File Formats:** The script currently only supports PDF files as input.
-```
