@@ -140,9 +140,12 @@ async def upload_cv(file: UploadFile = File(...)):
 
         # --- Supabase Integration ---
         if supabase:
-            # 1. Upload original CV to Supabase Storage
-            file_path = f"uploads/{uuid.uuid4()}_{file.filename}"
+            # Sanitize the filename to be URL-safe for Supabase Storage
+            safe_filename = re.sub(r'[^a-zA-Z0-9._-]', '_', file.filename)
+            file_path = f"uploads/{uuid.uuid4()}_{safe_filename}"
+
             try:
+                # 1. Upload original CV to Supabase Storage
                 response = supabase.storage.from_("cvs").upload(file_path, pdf_bytes, {"content-type": "application/pdf"})
 
                 # 2. Save extracted data to Supabase Database
