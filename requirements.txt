@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+python-multipart
+spacy
+supabase
+python-dotenv
+jinja2
+python-docx
+easyocr
+torch
+torchvision
+Pillow
+PyMuPDF
