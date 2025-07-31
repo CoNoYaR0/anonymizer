@@ -2,7 +2,7 @@ import os
 import json
 import re
 import spacy
-import platform
+from docx import Document
 import logging
 
 # Set up logging
@@ -11,35 +11,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # Load the French spaCy model
 nlp = spacy.load("fr_core_news_md")
 
-def extract_text_from_doc(doc_path):
+def extract_text_from_docx(docx_path):
     """
-    Extracts text from a DOC file using win32com.
+    Extracts text from a DOCX file using python-docx.
     """
-    logging.info(f"Attempting to extract text from: {doc_path}")
-    if platform.system() != "Windows":
-        logging.error("This function can only be run on Windows.")
-        return "This function can only be run on Windows."
-
-    import win32com.client
-
+    logging.info(f"Attempting to extract text from: {docx_path}")
     try:
-        word = win32com.client.Dispatch("Word.Application")
-        word.visible = False
-
-        # Change the current working directory to the directory of the doc file
-        dir_path = os.path.dirname(doc_path)
-        os.chdir(dir_path)
-
-        logging.info(f"Opening Word document: {os.path.basename(doc_path)}")
-        doc = word.Documents.Open(os.path.basename(doc_path))
-        text = doc.Content.Text
-        doc.Close()
-        word.Quit()
-        logging.info("Successfully extracted text from DOC file.")
+        doc = Document(docx_path)
+        text = '\n'.join([p.text for p in doc.paragraphs])
+        logging.info("Successfully extracted text from DOCX file.")
         return text
     except Exception as e:
-        logging.error(f"Error extracting text from DOC: {e}")
-        return f"Error extracting text from DOC: {e}"
+        logging.error(f"Error extracting text from DOCX: {e}")
+        return f"Error extracting text from DOCX: {e}"
 
 def extract_contact_info(text):
     """
@@ -99,47 +83,39 @@ def extract_sections(text):
 
     return sections
 
-def create_doc(output_path, data):
+def create_docx(output_path, data):
     """
-    Creates a DOC file with the provided data.
+    Creates a DOCX file with the provided data.
     """
-    if platform.system() != "Windows":
-        return "This function can only be run on Windows."
-
-    import win32com.client
-
     try:
-        word = win32com.client.Dispatch("Word.Application")
-        word.visible = False
-        doc = word.Documents.Add()
-
+        doc = Document()
         for key, value in data.items():
-            doc.Content.InsertAfter(f"{key}: {value}\n")
-
-        doc.SaveAs(output_path)
-        doc.Close()
-        word.Quit()
+            doc.add_paragraph(f"{key}: {value}")
+        doc.save(output_path)
         return True
     except Exception as e:
-        print(f"Error creating DOC: {e}")
+        print(f"Error creating DOCX: {e}")
         return False
 
 def main():
     """
     Main function to run the anonymization process.
     """
+    # Create a new, empty docx file to use as a template
+    doc = Document()
+    doc.save("templates/template_cv.docx")
+
     # File paths
-    doc_path = os.path.abspath("templates/Dossier_de_competences_KOUKA_JTA.doc")
-    logging.info(f"Absolute path to DOC file: {doc_path}")
+    docx_path = "templates/template_cv.docx"
     output_dir = "outputs"
 
     # Create output directory if it doesn't exist
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # 1. Extract text from DOC
-    text = extract_text_from_doc(doc_path)
-    if text.startswith("Error") or text.startswith("This function"):
+    # 1. Extract text from DOCX
+    text = extract_text_from_docx(docx_path)
+    if text.startswith("Error"):
         print(text)
         return
 
@@ -169,11 +145,11 @@ def main():
     with open(json_output_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-    # 5. Create DOC
-    doc_output_path = os.path.join(output_dir, f"anonymized_cv_{candidate_id}.doc")
+    # 5. Create DOCX
+    docx_output_path = os.path.join(output_dir, f"anonymized_cv_{candidate_id}.docx")
 
-    # Data for the doc
-    doc_data = {
+    # Data for the docx
+    docx_data = {
         "candidate_id": candidate_id,
         "email": "email_001@example.com",
         "phone": "phone_001",
@@ -183,8 +159,8 @@ def main():
         "technologies": "\n".join(sections["technologies"]),
     }
 
-    if not create_doc(doc_output_path, doc_data):
-        print("Failed to create DOC file.")
+    if not create_docx(docx_output_path, docx_data):
+        print("Failed to create DOCX file.")
 
     # Report missing fields
     errors = []

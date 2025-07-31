@@ -1,13 +1,10 @@
 services:
-  - type: web
+  - type: worker
     name: anonymizer
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python anonymizer.py && sleep infinity
-    healthCheckPath: /
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "apt-get update && apt-get install -y tesseract-ocr poppler-utils && python anonymizer.py"
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.0
-      - key: TESSDATA_PREFIX
-        value: /usr/share/tesseract-ocr/4.00/tessdata
+        value: "3.10"
