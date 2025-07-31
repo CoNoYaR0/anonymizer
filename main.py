@@ -3,6 +3,7 @@ import re
 import uuid
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from pydantic import BaseModel, Field
+import os
 import pytesseract
 from pdf2image import convert_from_bytes
 import spacy
@@ -60,20 +61,22 @@ def read_root():
 
 @app.get("/status")
 def get_status():
-    """Returns the current status of the server, including resource usage."""
-    cpu_usage = psutil.cpu_percent(interval=1)
-    memory_info = psutil.virtual_memory()
+    """Returns the current status of the server, focusing on the app's resource usage."""
+    process = psutil.Process(os.getpid())
+
+    # Get process-specific memory usage
+    memory_info = process.memory_info()
+    memory_used_mb = memory_info.rss / (1024 ** 2)  # rss is typically the most relevant metric
+
+    # Get overall system disk usage (disk usage is not process-specific)
     disk_info = psutil.disk_usage('/')
 
     return {
-        "cpu_usage_percent": cpu_usage,
-        "memory_usage": {
-            "total": f"{memory_info.total / (1024**3):.2f} GB",
-            "available": f"{memory_info.available / (1024**3):.2f} GB",
-            "used": f"{memory_info.used / (1024**3):.2f} GB",
-            "percent": memory_info.percent
+        "app_cpu_usage_percent": process.cpu_percent(interval=0.1),
+        "app_memory_usage": {
+            "used_mb": f"{memory_used_mb:.2f} MB"
         },
-        "disk_usage": {
+        "system_disk_usage": {
             "total": f"{disk_info.total / (1024**3):.2f} GB",
             "used": f"{disk_info.used / (1024**3):.2f} GB",
             "free": f"{disk_info.free / (1024**3):.2f} GB",
