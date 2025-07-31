@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from PIL import Image
 import docx
 from docx.shared import Inches
+import psutil
 
 # Load environment variables from .env file
 load_dotenv()
@@ -56,6 +57,29 @@ else:
 def read_root():
     """Root endpoint to check if the API is running."""
     return {"message": "Welcome to the CV Anonymizer API!"}
+
+@app.get("/status")
+def get_status():
+    """Returns the current status of the server, including resource usage."""
+    cpu_usage = psutil.cpu_percent(interval=1)
+    memory_info = psutil.virtual_memory()
+    disk_info = psutil.disk_usage('/')
+
+    return {
+        "cpu_usage_percent": cpu_usage,
+        "memory_usage": {
+            "total": f"{memory_info.total / (1024**3):.2f} GB",
+            "available": f"{memory_info.available / (1024**3):.2f} GB",
+            "used": f"{memory_info.used / (1024**3):.2f} GB",
+            "percent": memory_info.percent
+        },
+        "disk_usage": {
+            "total": f"{disk_info.total / (1024**3):.2f} GB",
+            "used": f"{disk_info.used / (1024**3):.2f} GB",
+            "free": f"{disk_info.free / (1024**3):.2f} GB",
+            "percent": disk_info.percent
+        }
+    }
 
 @app.post("/upload")
 async def upload_cv(file: UploadFile = File(...)):
