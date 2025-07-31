@@ -152,14 +152,20 @@ async def upload_cv(file: UploadFile = File(...)):
                 db_response = supabase.table("extractions").insert({
                     "filename": file.filename,
                     "storage_path": file_path,
-                    "data": extracted_data["entities"]
+                    "data": extracted_data
                 }).execute()
+
+                # Get the ID of the newly inserted row
+                new_extraction_id = db_response.data[0]['id']
+
+                return {"extraction_id": new_extraction_id}
 
             except Exception as e:
                 # Log the error but don't block the response to the user
                 print(f"Warning: Supabase operation failed: {e}")
+                raise HTTPException(status_code=500, detail=f"Failed to save extraction data: {e}")
 
-
+        # Fallback for when Supabase is not configured
         return extracted_data
 
     except Exception as e:
@@ -189,39 +195,53 @@ def anonymize_text(text: str, entities: ExtractedEntities) -> str:
     return text
 
 
-@app.post("/anonymize")
-async def anonymize_cv(request: AnonymizeRequest):
+@app.get("/anonymize/{extraction_id}")
+async def anonymize_cv_by_id(extraction_id: int):
     """
-    Takes extracted data, anonymizes it, generates a DOCX file,
-    and returns a download link.
+    Fetches an extraction by its ID, anonymizes the data,
+    generates a DOCX file, and returns a download link.
     """
+    if not supabase:
+        raise HTTPException(status_code=503, detail="Supabase is not configured. Cannot fetch extraction data.")
 
-    anonymized_text = anonymize_text(request.raw_text, request.entities)
+    try:
+        # 1. Fetch the extraction data from the database
+        response = supabase.table("extractions").select("*").eq("id", extraction_id).single().execute()
+        extraction_data = response.data
 
-    # --- Generate DOCX ---
-    doc = docx.Document()
-    doc.add_heading('CV Anonymisé', 0)
-    doc.add_paragraph(anonymized_text)
+        if not extraction_data:
+            raise HTTPException(status_code=404, detail="Extraction not found.")
 
-    # Save doc to a temporary in-memory file
-    doc_io = io.BytesIO()
-    doc.save(doc_io)
-    doc_io.seek(0)
+        # Reconstruct the request data from the fetched record
+        # We need to manually create the Pydantic models for validation and structure
+        request_entities = ExtractedEntities(**extraction_data['data']['entities'])
+        request = AnonymizeRequest(
+            filename=extraction_data['data']['filename'],
+            entities=request_entities,
+            raw_text=extraction_data['data']['raw_text']
+        )
 
-    # --- Supabase Integration ---
-    if supabase:
+        # 2. Anonymize the text
+        anonymized_text = anonymize_text(request.raw_text, request.entities)
+
+        # 3. Generate DOCX
+        doc = docx.Document()
+        doc.add_heading('CV Anonymisé', 0)
+        doc.add_paragraph(anonymized_text)
+
+        doc_io = io.BytesIO()
+        doc.save(doc_io)
+        doc_io.seek(0)
+
+        # 4. Upload anonymized DOCX to Supabase and get download link
         anonymized_filename = f"anonymized_{request.filename.replace('.pdf', '.docx')}"
         file_path = f"anonymized_cvs/{uuid.uuid4()}_{anonymized_filename}"
 
-        try:
-            supabase.storage.from_("cvs").upload(file_path, doc_io.getvalue(), {"content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"})
+        supabase.storage.from_("cvs").upload(file_path, doc_io.getvalue(), {"content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"})
 
-            # Generate a signed URL for download
-            download_url = supabase.storage.from_("cvs").create_signed_url(file_path, 60 * 60 * 24) # 24-hour expiry
+        download_url_response = supabase.storage.from_("cvs").create_signed_url(file_path, 60 * 60 * 24) # 24-hour expiry
 
-            return {"download_url": download_url['signedURL']}
+        return {"download_url": download_url_response['signedURL']}
 
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to upload to Supabase: {e}")
-    else:
-        return {"message": "Anonymized document generated, but Supabase is not configured for upload.", "anonymized_text": anonymized_text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")

@@ -79,3 +79,15 @@ CREATE TABLE sectors (
 );
 
 COMMENT ON TABLE sectors IS 'Stores the sectors or industries the candidate has worked in.';
+
+
+-- Table to log each extraction event and its raw JSON output
+CREATE TABLE extractions (
+    id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY, -- Unique, auto-incrementing identifier for the extraction log
+    filename TEXT, -- The original filename of the uploaded CV
+    storage_path TEXT, -- The path to the original CV in Supabase Storage
+    data JSONB, -- The raw JSON data that was extracted from the CV
+    created_at TIMESTAMPTZ DEFAULT NOW() -- Timestamp of when the extraction was performed
+);
+
+COMMENT ON TABLE extractions IS 'Stores the raw JSON output from the OCR and NER extraction process for each CV.';

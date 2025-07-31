@@ -134,71 +134,46 @@ curl http://127.0.0.1:8000/status
 }
 ```
 
-#### 2. Uploading a CV (`/upload`)
+#### 2. Upload a CV & Start Anonymization (`/upload`)
 
-This endpoint processes a PDF file, extracts the text, and identifies personal information.
+This endpoint processes a PDF file, extracts all the data, saves it to the database, and returns a unique ID for the processed job.
 
 *   **URL:** `/upload`
 *   **Method:** `POST`
-*   **Body:** `multipart/form-data` with a `file` field containing the PDF.
+*   **Body:** `multipart/form-data` with a `file` field containing your PDF.
 
 **Example using `curl`:**
-
 ```bash
 curl -X POST -F "file=@/path/to/your/cv.pdf" http://127.0.0.1:8000/upload
 ```
 
 **Successful Response:**
 
-The API will return a JSON object containing the extracted text and entities. You should save this response, as you will need it for the next step.
-
+The API will return a JSON object containing the `extraction_id`. You will use this ID in the next step.
 ```json
 {
-  "filename": "cv.pdf",
-  "entities": {
-    "persons": ["John Doe"],
-    "locations": ["New York"],
-    "emails": ["john.doe@email.com"],
-    "phones": ["123-456-7890"],
-    "skills": [],
-    "experience": []
-  },
-  "raw_text": "John Doe\\nNew York\\njohn.doe@email.com\\n123-456-7890..."
+  "extraction_id": 123
 }
 ```
 
-### 2. Anonymizing a CV (`/anonymize`)
+#### 3. Generate and Download the Anonymized CV (`/anonymize/{extraction_id}`)
 
-This endpoint takes the JSON data from the `/upload` step, creates an anonymized version, and generates a `.docx` file.
+This endpoint takes the `extraction_id` from the previous step, generates the anonymized `.docx` file, and provides a secure download link.
 
-*   **URL:** `/anonymize`
-*   **Method:** `POST`
-*   **Body:** The JSON response you received from the `/upload` endpoint.
+*   **URL:** `/anonymize/{extraction_id}` (e.g., `/anonymize/123`)
+*   **Method:** `GET`
 
 **Example using `curl`:**
-
-First, save the output of the `/upload` call to a file (e.g., `response.json`). Then, use that file as the data for this request:
-
 ```bash
-curl -X POST -H "Content-Type: application/json" -d @response.json http://127.0.0.1:8000/anonymize
+curl http://127.0.0.1:8000/anonymize/123
 ```
 
 **Successful Response:**
 
-If Supabase is configured, the response will contain a download link for the anonymized `.docx` file.
-
+The response will contain a download link for the generated `.docx` file. This link is temporary and will expire after 24 hours.
 ```json
 {
   "download_url": "https://<project-ref>.supabase.co/storage/v1/object/sign/cvs/anonymized_cvs/..."
-}
-```
-
-If Supabase is not configured, it will return the anonymized text directly:
-
-```json
-{
-  "message": "Anonymized document generated, but Supabase is not configured for upload.",
-  "anonymized_text": "Person (JD)\\n[LOCATION REDACTED]\\n[EMAIL REDACTED]\\n[PHONE REDACTED]..."
 }
 ```
 
