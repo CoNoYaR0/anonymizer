@@ -37,12 +37,12 @@ reader = easyocr.Reader(['fr'])
 
 # Load spaCy model
 try:
-    nlp = spacy.load("fr_core_news_md")
+    nlp = spacy.load("fr_core_news_sm")
 except OSError:
-    print("Downloading spaCy model 'fr_core_news_md'...")
+    print("Downloading spaCy model 'fr_core_news_sm'...")
     from spacy.cli import download
-    download("fr_core_news_md")
-    nlp = spacy.load("fr_core_news_md")
+    download("fr_core_news_sm")
+    nlp = spacy.load("fr_core_news_sm")
 
 
 app = FastAPI(title="CV Anonymizer API")
