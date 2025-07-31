@@ -3,13 +3,12 @@ import re
 import uuid
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from pydantic import BaseModel, Field
-import fitz  # PyMuPDF
-import easyocr
+import pytesseract
+from pdf2image import convert_from_bytes
 import spacy
 from supabase import create_client, Client
 import io
 from dotenv import load_dotenv
-import numpy as np
 from PIL import Image
 import docx
 from docx.shared import Inches
@@ -31,18 +30,14 @@ class AnonymizeRequest(BaseModel):
     entities: ExtractedEntities
     raw_text: str
 
-# Initialize EasyOCR reader
-# This is done once when the application starts
-reader = easyocr.Reader(['fr'])
-
 # Load spaCy model
 try:
-    nlp = spacy.load("fr_core_news_sm")
+    nlp = spacy.load("fr_core_news_lg")
 except OSError:
-    print("Downloading spaCy model 'fr_core_news_sm'...")
+    print("Downloading spaCy model 'fr_core_news_lg'...")
     from spacy.cli import download
-    download("fr_core_news_sm")
-    nlp = spacy.load("fr_core_news_sm")
+    download("fr_core_news_lg")
+    nlp = spacy.load("fr_core_news_lg")
 
 
 app = FastAPI(title="CV Anonymizer API")
@@ -73,20 +68,16 @@ async def upload_cv(file: UploadFile = File(...)):
     try:
         pdf_bytes = await file.read()
 
-        # --- PDF to Text using PyMuPDF and EasyOCR ---
-        text = ""
-        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-            for page in doc:
-                pix = page.get_pixmap()
-                img_bytes = pix.tobytes("png")
-
-                # Convert bytes to a numpy array for EasyOCR
-                image = Image.open(io.BytesIO(img_bytes))
-
-                # Use EasyOCR to extract text
-                result = reader.readtext(np.array(image))
-                page_text = " ".join([item[1] for item in result])
+        # --- PDF to Text using pdf2image and Pytesseract ---
+        try:
+            images = convert_from_bytes(pdf_bytes)
+            text = ""
+            for img in images:
+                # Use pytesseract to extract text, specifying French language
+                page_text = pytesseract.image_to_string(img, lang='fra')
                 text += page_text + "\n"
+        except Exception as ocr_error:
+            raise HTTPException(status_code=500, detail=f"OCR processing failed: {ocr_error}. Make sure Tesseract and Poppler are installed and accessible in your system's PATH.")
 
         if not text.strip():
             raise HTTPException(status_code=400, detail="Could not extract any text from the PDF.")
