@@ -89,9 +89,52 @@ The API is now available at `http://127.0.0.1:8000`.
 
 ## Using the API
 
-You can interact with the API using tools like `curl` or Postman. Here are the two main endpoints:
+You can interact with the API using tools like `curl`, Postman, or your web browser.
 
-### 1. Uploading a CV (`/upload`)
+### API Documentation (Swagger UI)
+
+FastAPI provides interactive API documentation for free. This is the easiest way to explore and test the endpoints.
+
+*   **URL:** `http://127.0.0.1:8000/docs`
+
+Once you run the server, open this URL in your browser. You will see the Swagger UI, which allows you to see all the endpoints, their parameters, and test them directly from your browser.
+
+### Endpoints
+
+Here are the main endpoints:
+
+#### 1. Get Server Status (`/status`)
+
+This endpoint provides real-time information about the server's resource usage.
+
+*   **URL:** `/status`
+*   **Method:** `GET`
+
+**Example using `curl`:**
+```bash
+curl http://127.0.0.1:8000/status
+```
+
+**Successful Response:**
+```json
+{
+  "cpu_usage_percent": 15.4,
+  "memory_usage": {
+    "total": "31.27 GB",
+    "available": "24.01 GB",
+    "used": "7.26 GB",
+    "percent": 23.2
+  },
+  "disk_usage": {
+    "total": "475.22 GB",
+    "used": "50.31 GB",
+    "free": "424.91 GB",
+    "percent": 10.6
+  }
+}
+```
+
+#### 2. Uploading a CV (`/upload`)
 
 This endpoint processes a PDF file, extracts the text, and identifies personal information.
 
