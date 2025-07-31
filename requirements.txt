@@ -10,3 +10,4 @@ pytesseract
 pdf2image
 Pillow
 PyMuPDF
+psutil
