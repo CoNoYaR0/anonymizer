@@ -44,7 +44,8 @@ As of now, we have successfully completed the core backend functionality as outl
 *   ➡️ **Phase 3: Frontend avancé et gestion utilisateur**
     *   This is the next major part of the project. It involves creating a separate frontend application (e.g., using React) that will consume this backend API.
 *   ➡️ **Phase 4: Intégration d’un LLM open-source**
-    *   This is a planned enhancement for the backend. The goal is to use a Large Language Model (like Mistral, as suggested in the `README.md`) to significantly improve the accuracy and structure of the extracted data (e.g., correctly parsing job missions, skills, and experiences). This will address the remaining inaccuracies of the current spaCy-based extraction.
+    *   **Initial Plan:** Use an LLM to parse the raw OCR text directly.
+    *   **Revised Plan (Hybrid Approach):** A more sophisticated and efficient approach was adopted. We will use `spaCy` for a fast "first pass" extraction of simple entities. Then, we will feed both the raw text and this initial JSON to an LLM (e.g., Mistral on Hugging Face). The LLM's task will be to refine and complete this JSON, correcting OCR errors and extracting more complex, contextual information like job experiences and skills. This method is more token-efficient and provides more reliable, structured output.
 *   ➡️ **Phase 5: Passage en production sécurisée**
     *   **Deployment:** Re-evaluate the deployment strategy for Render. This will likely involve creating a `build.sh` script to install Tesseract and Poppler in the build environment, or choosing a higher-tier plan with more memory.
     *   **CI/CD:** Set up a continuous integration and deployment pipeline (e.g., using GitHub Actions) to automate testing and deployments.
