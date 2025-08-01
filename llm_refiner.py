@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
+API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
 HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
 
 def refine_extraction_with_llm(raw_text: str, initial_extraction: dict) -> tuple[bool, dict]:
