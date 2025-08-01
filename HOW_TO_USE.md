@@ -55,9 +55,11 @@ Create a file named `.env` in the root of the project directory and add the foll
 ```
 SUPABASE_URL="YOUR_SUPABASE_URL"
 SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
+HUGGINGFACE_API_KEY="YOUR_HUGGINGFACE_API_KEY"
 ```
 
-Replace `"YOUR_SUPABASE_URL"` and `"YOUR_SUPABASE_ANON_KEY"` with your actual Supabase project URL and public `anon` key. See the [Configuration (Supabase)](#configuration-supabase) section for details on how to get these.
+*   Replace the Supabase variables with your actual Supabase project URL and public `anon` key.
+*   Replace the Hugging Face variable with your API key from your Hugging Face account settings.
 
 **Note:** If you run the application without this file, the Supabase integration will be disabled. The API will still work, but no files will be saved.
 
