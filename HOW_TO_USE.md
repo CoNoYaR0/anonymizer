@@ -56,10 +56,12 @@ Create a file named `.env` in the root of the project directory and add the foll
 SUPABASE_URL="YOUR_SUPABASE_URL"
 SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
 HUGGINGFACE_API_KEY="YOUR_HUGGINGFACE_API_KEY"
+DEBUG="False"
 ```
 
-*   Replace the Supabase variables with your actual Supabase project URL and public `anon` key.
-*   Replace the Hugging Face variable with your API key from your Hugging Face account settings.
+*   **`SUPABASE_URL` / `SUPABASE_ANON_KEY`**: Your project's Supabase credentials.
+*   **`HUGGINGFACE_API_KEY`**: Your API key from Hugging Face for LLM refinement.
+*   **`DEBUG`**: Set to `"True"` to enable detailed debug logging and to receive detailed error messages in API responses. Defaults to `"False"`.
 
 **Note:** If you run the application without this file, the Supabase integration will be disabled. The API will still work, but no files will be saved.
 

@@ -1,3 +1,5 @@
+import logger_config # Import to configure logging
+import logging
 from dotenv import load_dotenv, find_dotenv
 
 # Load environment variables from .env file BEFORE any other imports that might
@@ -21,6 +23,11 @@ from docx.shared import Inches
 import psutil
 from llm_refiner import refine_extraction_with_llm
 
+# Get a logger for the current module
+logger = logging.getLogger(__name__)
+
+# --- Environment-based Configuration ---
+DEBUG_MODE = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 
 class ExtractedEntities(BaseModel):
     persons: list[str] = Field(..., example=["Jean Dupont"])
@@ -90,87 +97,89 @@ def get_status():
 @app.post("/upload")
 async def upload_cv(file: UploadFile = File(...)):
     """
-    Uploads a CV, extracts text using OCR, and returns the raw text.
+    Uploads a CV, extracts text, refines it with an LLM, and saves the result.
     """
+    logger.info(f"Received file '{file.filename}' for upload.")
     if file.content_type != "application/pdf":
+        logger.warning(f"Invalid file type '{file.content_type}' received.")
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload a PDF.")
 
     try:
         pdf_bytes = await file.read()
-
-        # --- PDF to Text using pdf2image and Pytesseract ---
+        logger.info("Starting OCR processing...")
         try:
             images = convert_from_bytes(pdf_bytes)
             text = ""
-            for img in images:
-                # Use pytesseract to extract text, specifying French language
+            for i, img in enumerate(images):
                 page_text = pytesseract.image_to_string(img, lang='fra')
                 text += page_text + "\n"
+                logger.debug(f"Extracted text from page {i+1}.")
+            logger.info("OCR processing completed.")
         except Exception as ocr_error:
-            raise HTTPException(status_code=500, detail=f"OCR processing failed: {ocr_error}. Make sure Tesseract and Poppler are installed and accessible in your system's PATH.")
+            logger.error(f"OCR processing failed: {ocr_error}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"OCR processing failed. Ensure Tesseract and Poppler are installed.")
 
         if not text.strip():
+            logger.warning("No text could be extracted from the PDF.")
             raise HTTPException(status_code=400, detail="Could not extract any text from the PDF.")
 
-        # --- Initial Data Extraction (spaCy + Regex) ---
+        logger.info("Starting initial data extraction with spaCy...")
         doc = nlp(text)
         persons = list(set([ent.text for ent in doc.ents if ent.label_ == "PER"]))
         locations = list(set([ent.text for ent in doc.ents if ent.label_ == "LOC"]))
         emails = list(set(re.findall(r'[\w\.-]+@[\w\.-]+', text)))
         phones = list(set(re.findall(r'(\d{2}[-\.\s]?){4}\d{2}', text)))
-
-        initial_extraction = {
-            "persons": persons,
-            "locations": locations,
-            "emails": emails,
-            "phones": phones,
-            "skills": [],
-            "experience": []
-        }
+        initial_extraction = {"persons": persons, "locations": locations, "emails": emails, "phones": phones, "skills": [], "experience": []}
+        logger.info("Initial data extraction completed.")
 
         # --- LLM Refinement ---
-        # The LLM will correct the initial extraction and fill in the missing pieces.
-        refined_entities = refine_extraction_with_llm(text, initial_extraction)
+        llm_success, llm_result = refine_extraction_with_llm(text, initial_extraction)
+        if not llm_success:
+            logger.error("LLM refinement failed.")
+            # If in debug mode, send the detailed error back to the client.
+            # Otherwise, send a generic error to avoid exposing internal details.
+            error_detail = "LLM refinement failed. Upstream service may be unavailable."
+            if DEBUG_MODE:
+                error_detail = llm_result # The detailed error from the refiner
 
-        # This is the final, clean data object we will save
-        final_data_to_save = {
-            "filename": file.filename,
-            "entities": refined_entities,
-            "raw_text": text,
-        }
+            # 502 Bad Gateway is appropriate as we depend on an upstream service (Hugging Face) that failed.
+            raise HTTPException(status_code=502, detail=error_detail)
+
+        refined_entities = llm_result
+
+        final_data_to_save = {"filename": file.filename, "entities": refined_entities, "raw_text": text}
+        logger.info("Successfully prepared final data object.")
 
         # --- Supabase Integration ---
         if supabase:
-            # Sanitize the filename to be URL-safe for Supabase Storage
             safe_filename = re.sub(r'[^a-zA-Z0-9._-]', '_', file.filename)
             file_path = f"uploads/{uuid.uuid4()}_{safe_filename}"
-
+            logger.info(f"Uploading file to Supabase at path: {file_path}")
             try:
-                # 1. Upload original CV to Supabase Storage
-                response = supabase.storage.from_("cvs").upload(file_path, pdf_bytes, {"content-type": "application/pdf"})
+                supabase.storage.from_("cvs").upload(file_path, pdf_bytes, {"content-type": "application/pdf"})
+                logger.info("File uploaded to Supabase Storage.")
 
-                # 2. Save extracted data to Supabase Database
-                db_response = supabase.table("extractions").insert({
-                    "filename": file.filename,
-                    "storage_path": file_path,
-                    "data": final_data_to_save
-                }).execute()
-
-                # Get the ID of the newly inserted row
+                logger.info("Inserting extraction data into Supabase DB...")
+                db_response = supabase.table("extractions").insert({"filename": file.filename, "storage_path": file_path, "data": final_data_to_save}).execute()
                 new_extraction_id = db_response.data[0]['id']
+                logger.info(f"Extraction data saved with ID: {new_extraction_id}")
 
                 return {"extraction_id": new_extraction_id}
-
             except Exception as e:
-                # Log the error but don't block the response to the user
-                print(f"Warning: Supabase operation failed: {e}")
-                raise HTTPException(status_code=500, detail=f"Failed to save extraction data: {e}")
+                logger.error(f"Supabase operation failed: {e}", exc_info=True)
+                raise HTTPException(status_code=500, detail="Failed to save data to backend storage.")
+        else:
+            logger.warning("Supabase is not configured. Skipping database operations.")
+            # In a real scenario, you might want to block this or handle it differently.
+            # For now, we'll return the data without saving, which is not ideal.
+            return {"extraction_id": None, "detail": "Supabase not configured", "data": final_data_to_save}
 
-        # Fallback for when Supabase is not configured
-        return extracted_data
-
+    except HTTPException:
+        # Re-raise HTTPException to let FastAPI handle it
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred during file processing: {e}")
+        logger.critical(f"An unexpected error occurred during file processing for '{file.filename}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred during file processing.")
 
 
 def anonymize_text(text: str, entities: ExtractedEntities) -> str:
@@ -199,50 +208,66 @@ def anonymize_text(text: str, entities: ExtractedEntities) -> str:
 @app.get("/anonymize/{extraction_id}")
 async def anonymize_cv_by_id(extraction_id: int):
     """
-    Fetches an extraction by its ID, anonymizes the data,
-    generates a DOCX file, and returns a download link.
+    Fetches an extraction by ID, anonymizes it, generates a DOCX file,
+    and returns a secure download link.
     """
+    logger.info(f"Received request to anonymize extraction ID: {extraction_id}")
     if not supabase:
+        logger.error("Anonymization request failed: Supabase is not configured.")
         raise HTTPException(status_code=503, detail="Supabase is not configured. Cannot fetch extraction data.")
 
     try:
-        # 1. Fetch the extraction data from the database
+        logger.info(f"Fetching extraction data for ID: {extraction_id} from Supabase.")
         response = supabase.table("extractions").select("*").eq("id", extraction_id).single().execute()
         extraction_data = response.data
+        logger.info(f"Successfully fetched data for extraction ID: {extraction_id}.")
 
         if not extraction_data:
+            logger.warning(f"Extraction ID: {extraction_id} not found in the database.")
             raise HTTPException(status_code=404, detail="Extraction not found.")
 
-        # Reconstruct the request data from the fetched record
-        # We need to manually create the Pydantic models for validation and structure
         request_entities = ExtractedEntities(**extraction_data['data']['entities'])
         request = AnonymizeRequest(
             filename=extraction_data['data']['filename'],
             entities=request_entities,
             raw_text=extraction_data['data']['raw_text']
         )
+        logger.debug("Successfully reconstructed request data from fetched record.")
 
-        # 2. Anonymize the text
+        logger.info("Anonymizing text...")
         anonymized_text = anonymize_text(request.raw_text, request.entities)
+        logger.info("Text anonymization complete.")
 
-        # 3. Generate DOCX
+        logger.info("Generating DOCX document...")
         doc = docx.Document()
         doc.add_heading('CV Anonymisé', 0)
         doc.add_paragraph(anonymized_text)
-
         doc_io = io.BytesIO()
         doc.save(doc_io)
         doc_io.seek(0)
+        logger.info("DOCX document generated successfully.")
 
-        # 4. Upload anonymized DOCX to Supabase and get download link
         anonymized_filename = f"anonymized_{request.filename.replace('.pdf', '.docx')}"
         file_path = f"anonymized_cvs/{uuid.uuid4()}_{anonymized_filename}"
 
-        supabase.storage.from_("cvs").upload(file_path, doc_io.getvalue(), {"content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"})
+        logger.info(f"Uploading anonymized DOCX to Supabase at path: {file_path}")
+        supabase.storage.from_("cvs").upload(
+            file_path,
+            doc_io.getvalue(),
+            {"content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+        )
+        logger.info("Anonymized file uploaded to Supabase storage.")
 
-        download_url_response = supabase.storage.from_("cvs").create_signed_url(file_path, 60 * 60 * 24) # 24-hour expiry
+        logger.info("Creating signed download URL...")
+        # 24-hour expiry
+        download_url_response = supabase.storage.from_("cvs").create_signed_url(file_path, 60 * 60 * 24)
+        logger.info("Signed URL created successfully.")
 
         return {"download_url": download_url_response['signedURL']}
 
+    except HTTPException:
+        # Re-raise HTTPException to let FastAPI handle it
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
+        logger.critical(f"An unexpected error occurred during anonymization for ID {extraction_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred during anonymization.")
