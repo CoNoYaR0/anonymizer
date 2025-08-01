@@ -92,6 +92,19 @@ INFO:     Application startup complete.
 The API is now available at `http://127.0.0.1:8000`.
 
 ---
+## Monitoring the API
+
+This project includes a live CLI dashboard to monitor the status of the API in real-time.
+
+To run the dashboard, first ensure the main FastAPI server is running. Then, in a separate terminal, run:
+
+```bash
+python monitor.py
+```
+
+This will display a panel that continuously updates with the server's CPU, memory, and disk usage. Press `Ctrl+C` to exit the monitor.
+
+---
 
 ## Using the API
 
