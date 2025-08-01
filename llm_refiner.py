@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2"
+API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-base"
 HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
 
 def refine_extraction_with_llm(raw_text: str, initial_extraction: dict) -> tuple[bool, dict]:
@@ -31,32 +31,35 @@ def refine_extraction_with_llm(raw_text: str, initial_extraction: dict) -> tuple
     initial_extraction_json = json.dumps(initial_extraction, indent=2)
 
     prompt = f"""
-[INST]
-You are a highly intelligent and precise data extraction bot. Your sole purpose is to extract information from a CV's raw text and format it as a perfect, machine-readable JSON object.
-**Instructions:**
-1.  You will be given raw text that was extracted from a PDF using an OCR tool. This text may contain errors.
-2.  You will also be given a preliminary JSON object that contains a "first pass" extraction of some entities.
-3.  Your task is to **correct and complete** this JSON object.
-4.  Use the raw text to correct any spelling mistakes or OCR errors in the preliminary JSON.
-5.  Carefully parse the raw text to extract the professional experiences and skills. Pay close attention to dates, job titles, and lists of technologies.
-6.  **The final output MUST be ONLY the JSON object.** Do not include any other text, explanations, or apologies. Do not use markdown formatting like ```json.
-**JSON Schema to Follow:**
-Your final JSON output must follow this exact structure:
+Task: You are a precise data extraction bot. Your job is to analyze the provided OCR text from a CV and a preliminary JSON object. Correct and complete the JSON object based on the raw text.
+
+Instructions:
+1.  Analyze the "Raw OCR Text". It may have errors.
+2.  Use the text to correct and complete the "Preliminary JSON".
+3.  Extract professional experiences, skills, dates, job titles, and technologies.
+4.  Your final output must be ONLY the JSON object. Do not add any explanations or markdown formatting.
+
+JSON Schema to follow:
 {{
   "persons": ["string"], "locations": ["string"], "emails": ["string"], "phones": ["string"],
   "skills": [{{ "category": "string", "skills_list": ["string"] }}],
   "experience": [{{ "job_title": "string", "company_name": "string", "start_date": "string", "end_date": "string", "job_context": "string", "missions": ["string"], "technologies": ["string"] }}]
 }}
-**Input Data:**
-**Raw OCR Text:**
+
+---
+Input Data:
+
+Raw OCR Text:
 ```
 {raw_text}
 ```
-**Preliminary JSON:**
+
+Preliminary JSON:
 ```json
 {initial_extraction_json}
 ```
-[/INST]
+---
+Final JSON Output:
 """
     payload = {"inputs": prompt}
 

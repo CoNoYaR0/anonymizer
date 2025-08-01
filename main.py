@@ -115,14 +115,14 @@ async def upload_cv(file: UploadFile = File(...)):
         if supabase:
             try:
                 logger.debug(f"Checking for existing hash in the database...")
-                existing_extraction = supabase.table("extractions").select("id").eq("file_hash", file_hash).single().execute()
-                if existing_extraction.data:
-                    extraction_id = existing_extraction.data['id']
+                # .execute() returns a list, so we check if it's empty
+                response = supabase.table("extractions").select("id").eq("file_hash", file_hash).execute()
+                if response.data:
+                    extraction_id = response.data[0]['id']
                     logger.info(f"Duplicate file detected. Found existing extraction_id: {extraction_id} for hash: {file_hash}")
                     return {"extraction_id": extraction_id, "detail": "File already processed."}
             except Exception as e:
-                # If the query fails for some reason (e.g., PostgREST error), log it but continue processing.
-                # It's safer to re-process than to fail the upload.
+                # It's safer to re-process than to fail the upload if the check fails.
                 logger.error(f"Could not check for existing file hash. Proceeding with processing. Error: {e}")
 
         logger.info("Starting OCR processing...")
