@@ -2,9 +2,21 @@ import os
 import httpx
 import json
 import logging
+import re
 
 # Get a logger for the current module
 logger = logging.getLogger(__name__)
+
+def clean_for_bart(text: str) -> str:
+    """
+    Sanitizes text to be a single, clean block of natural language
+    for the BART model.
+    """
+    # Replace various newline characters with a single space
+    text = text.replace('\n', ' ').replace('\r', ' ')
+    # Replace multiple whitespace characters with a single space
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 # --- Configuration ---
 API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
@@ -21,32 +33,20 @@ def refine_extraction_with_llm(raw_text: str, initial_extraction: dict) -> tuple
 
     headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
 
-    # Since BART is a summarization model, we frame the task as summarizing the CV into a JSON object.
-    # We provide the initial extraction as context to guide the summary.
-    initial_extraction_json = json.dumps(initial_extraction, indent=2)
+    logger.info("Cleaning and truncating text for BART model...")
+    # Clean the raw text to be more natural language like.
+    cleaned_text = clean_for_bart(raw_text)
 
-    prompt = f"""
-Summarize the following CV text into a structured JSON format. Use the provided "Preliminary JSON" as a guide for the names, emails, and phones to include. Focus on extracting and structuring the work experience and skills.
+    # Truncate to ~700 words to stay within model limits.
+    words = cleaned_text.split()
+    truncated_text = " ".join(words[:700])
 
-CV Text:
-{raw_text}
+    logger.debug(f"Cleaned and truncated text: {truncated_text[:200]}...") # Log a preview
 
-Preliminary JSON:
-{initial_extraction_json}
+    # The payload for BART is just the clean text.
+    payload = {"inputs": truncated_text}
 
-Structured JSON Summary:
-"""
-
-    # BART expects the payload in a slightly different format for summarization
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "do_sample": False,
-            "max_length": 1024 # Increased max length for potentially long CVs
-        }
-    }
-
-    logger.info(f"Calling Hugging Face Inference API ({API_URL}) for refinement...")
+    logger.info(f"Calling Hugging Face Inference API ({API_URL}) with sanitized payload...")
     logger.debug(f"API URL: {API_URL}")
     logger.debug(f"Headers: {{'Authorization': 'Bearer [REDACTED]'}}") # Avoid logging the key
     logger.debug(f"Payload: {json.dumps(payload, indent=2)}")
@@ -64,18 +64,18 @@ Structured JSON Summary:
             logger.error(f"Hugging Face API returned non-200 status: {response.status_code} - {response.text}")
             return False, error_detail
 
-        llm_output = response.json()[0]['generated_text']
-        json_start_index = llm_output.find('{')
+        # The output from BART is a summary string, not a JSON object.
+        summary_text = response.json()[0]['summary_text']
+        logger.info(f"Successfully received summary from BART: {summary_text[:100]}...")
 
-        if json_start_index == -1:
-            error_detail = {"error": "LLM did not return a valid JSON object.", "llm_output": llm_output}
-            logger.error(f"LLM response did not contain a JSON object. Raw output: {llm_output}")
-            return False, error_detail
+        # We are not replacing the initial extraction, but augmenting it.
+        # The downstream process expects a dictionary in the original format.
+        final_data = initial_extraction.copy()
 
-        json_string = llm_output[json_start_index:]
-        refined_data = json.loads(json_string)
-        logger.info("Successfully refined extraction with LLM.")
-        return True, refined_data
+        # Add the summary as a new key.
+        final_data['llm_summary'] = summary_text
+
+        return True, final_data
 
     except httpx.RequestError as e:
         error_detail = {"error": "HTTPX Request Error", "details": str(e)}
