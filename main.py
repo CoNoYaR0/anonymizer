@@ -10,6 +10,7 @@ load_dotenv(find_dotenv())
 import os
 import re
 import uuid
+import hashlib
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from pydantic import BaseModel, Field
 import pytesseract
@@ -106,6 +107,24 @@ async def upload_cv(file: UploadFile = File(...)):
 
     try:
         pdf_bytes = await file.read()
+
+        # --- Deduplication Check ---
+        file_hash = hashlib.sha256(pdf_bytes).hexdigest()
+        logger.info(f"Calculated SHA256 hash for '{file.filename}': {file_hash}")
+
+        if supabase:
+            try:
+                logger.debug(f"Checking for existing hash in the database...")
+                existing_extraction = supabase.table("extractions").select("id").eq("file_hash", file_hash).single().execute()
+                if existing_extraction.data:
+                    extraction_id = existing_extraction.data['id']
+                    logger.info(f"Duplicate file detected. Found existing extraction_id: {extraction_id} for hash: {file_hash}")
+                    return {"extraction_id": extraction_id, "detail": "File already processed."}
+            except Exception as e:
+                # If the query fails for some reason (e.g., PostgREST error), log it but continue processing.
+                # It's safer to re-process than to fail the upload.
+                logger.error(f"Could not check for existing file hash. Proceeding with processing. Error: {e}")
+
         logger.info("Starting OCR processing...")
         try:
             images = convert_from_bytes(pdf_bytes)
@@ -136,13 +155,9 @@ async def upload_cv(file: UploadFile = File(...)):
         llm_success, llm_result = refine_extraction_with_llm(text, initial_extraction)
         if not llm_success:
             logger.error("LLM refinement failed.")
-            # If in debug mode, send the detailed error back to the client.
-            # Otherwise, send a generic error to avoid exposing internal details.
             error_detail = "LLM refinement failed. Upstream service may be unavailable."
             if DEBUG_MODE:
-                error_detail = llm_result # The detailed error from the refiner
-
-            # 502 Bad Gateway is appropriate as we depend on an upstream service (Hugging Face) that failed.
+                error_detail = llm_result
             raise HTTPException(status_code=502, detail=error_detail)
 
         refined_entities = llm_result
@@ -159,10 +174,15 @@ async def upload_cv(file: UploadFile = File(...)):
                 supabase.storage.from_("cvs").upload(file_path, pdf_bytes, {"content-type": "application/pdf"})
                 logger.info("File uploaded to Supabase Storage.")
 
-                logger.info("Inserting extraction data into Supabase DB...")
-                db_response = supabase.table("extractions").insert({"filename": file.filename, "storage_path": file_path, "data": final_data_to_save}).execute()
+                logger.info("Inserting new extraction data into Supabase DB...")
+                db_response = supabase.table("extractions").insert({
+                    "filename": file.filename,
+                    "storage_path": file_path,
+                    "data": final_data_to_save,
+                    "file_hash": file_hash  # Add the hash to the new record
+                }).execute()
                 new_extraction_id = db_response.data[0]['id']
-                logger.info(f"Extraction data saved with ID: {new_extraction_id}")
+                logger.info(f"New extraction data saved with ID: {new_extraction_id}")
 
                 return {"extraction_id": new_extraction_id}
             except Exception as e:
