@@ -26,26 +26,63 @@ def refine_extraction_with_llm(raw_text: str, initial_extraction: dict) -> dict:
         # Return the initial data if the LLM is not configured
         return initial_extraction
 
-    # --- Step 4.3: Prompt Engineering (To be built here) ---
-    # We will construct the detailed prompt in the next step.
+    # --- Step 4.3: Prompt Engineering ---
+    # We construct a detailed prompt with a clear role, instructions, and a schema for the output.
+    # The [INST] and [/INST] tokens are specific to Mistral's instruction-tuned models.
+
+    initial_extraction_json = json.dumps(initial_extraction, indent=2)
+
     prompt = f"""
-    You are an expert HR data analyst. Your task is to refine and complete the extraction of data from a CV.
+[INST]
+You are a highly intelligent and precise data extraction bot. Your sole purpose is to extract information from a CV's raw text and format it as a perfect, machine-readable JSON object.
 
-    Here is the raw text from the CV:
-    --- RAW TEXT ---
-    {raw_text}
-    --- END RAW TEXT ---
+**Instructions:**
+1.  You will be given raw text that was extracted from a PDF using an OCR tool. This text may contain errors.
+2.  You will also be given a preliminary JSON object that contains a "first pass" extraction of some entities.
+3.  Your task is to **correct and complete** this JSON object.
+4.  Use the raw text to correct any spelling mistakes or OCR errors in the preliminary JSON.
+5.  Carefully parse the raw text to extract the professional experiences and skills. Pay close attention to dates, job titles, and lists of technologies.
+6.  **The final output MUST be ONLY the JSON object.** Do not include any other text, explanations, or apologies. Do not use markdown formatting like ```json.
 
-    Here is a first-pass extraction done by a less advanced system:
-    --- INITIAL JSON ---
-    {json.dumps(initial_extraction, indent=2)}
-    --- END INITIAL JSON ---
+**JSON Schema to Follow:**
+Your final JSON output must follow this exact structure:
+{{
+  "persons": ["string"],
+  "locations": ["string"],
+  "emails": ["string"],
+  "phones": ["string"],
+  "skills": [
+    {{
+      "category": "string",
+      "skills_list": ["string"]
+    }}
+  ],
+  "experience": [
+    {{
+      "job_title": "string",
+      "company_name": "string",
+      "start_date": "string",
+      "end_date": "string",
+      "job_context": "string",
+      "missions": ["string"],
+      "technologies": ["string"]
+    }}
+  ]
+}}
 
-    Please refine this data. Correct any spelling mistakes or OCR errors in the JSON fields by cross-referencing the raw text.
-    Then, carefully parse the raw text to extract the 'experience' and 'skills' sections, which are currently missing.
+**Input Data:**
 
-    Return ONLY a single, clean, and complete JSON object with the final, corrected data. Do not add any commentary before or after the JSON.
-    """
+**Raw OCR Text:**
+```
+{raw_text}
+```
+
+**Preliminary JSON:**
+```json
+{initial_extraction_json}
+```
+[/INST]
+"""
 
     # --- Step 4.4: API Call (To be built here) ---
     # In the next step, we will add the code to send this prompt to the API.
