@@ -52,6 +52,11 @@ The application follows a sequential pipeline model. Here is the typical flow fo
 - **Responsibility**: Configures the application-wide logger.
 - **Functionality**: Sets up a `StreamHandler` to print formatted logs to the console. The log level is determined by the `DEBUG` environment variable (`DEBUG=True` sets level to `DEBUG`, otherwise `INFO`). This module is imported once at the top of `main.py` to apply the configuration.
 
+### `monitor.py`
+- **Responsibility**: A standalone CLI tool for real-time monitoring of the API's health.
+- **Functionality**: When executed (`python monitor.py`), this script periodically polls the `/status` endpoint of the running FastAPI application. It uses the `rich` library to display the fetched CPU, memory, and disk usage in a live-updating terminal dashboard.
+- **Dependencies**: `rich`, `httpx`.
+
 ### `migrations/`
 - **Responsibility**: Contains raw SQL files for setting up and evolving the database schema.
 - **Usage**: These are intended to be applied manually or via a migration tool to the Supabase PostgreSQL database.
