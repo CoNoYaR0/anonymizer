@@ -1,25 +1,25 @@
+from dotenv import load_dotenv, find_dotenv
+
+# Load environment variables from .env file BEFORE any other imports that might
+# depend on them (like llm_refiner). find_dotenv() will locate the .env file
+# in the project root.
+load_dotenv(find_dotenv())
+
 import os
 import re
 import uuid
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
 from pydantic import BaseModel, Field
-import os
 import pytesseract
 from pdf2image import convert_from_bytes
 import spacy
 from supabase import create_client, Client
 import io
-from dotenv import load_dotenv
 from PIL import Image
 import docx
 from docx.shared import Inches
 import psutil
 from llm_refiner import refine_extraction_with_llm
-from dotenv import load_dotenv, find_dotenv
-
-# Load environment variables from .env file
-# find_dotenv() will locate the .env file in the project root
-load_dotenv(find_dotenv())
 
 
 class ExtractedEntities(BaseModel):
