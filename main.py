@@ -14,6 +14,7 @@ from PIL import Image
 import docx
 from docx.shared import Inches
 import psutil
+from llm_refiner import refine_extraction_with_llm
 
 # Load environment variables from .env file
 load_dotenv()
@@ -109,32 +110,30 @@ async def upload_cv(file: UploadFile = File(...)):
         if not text.strip():
             raise HTTPException(status_code=400, detail="Could not extract any text from the PDF.")
 
-        # --- Entity Extraction using spaCy and Regex ---
+        # --- Initial Data Extraction (spaCy + Regex) ---
         doc = nlp(text)
+        persons = list(set([ent.text for ent in doc.ents if ent.label_ == "PER"]))
+        locations = list(set([ent.text for ent in doc.ents if ent.label_ == "LOC"]))
+        emails = list(set(re.findall(r'[\w\.-]+@[\w\.-]+', text)))
+        phones = list(set(re.findall(r'(\d{2}[-\.\s]?){4}\d{2}', text)))
 
-        # Extract entities
-        persons = [ent.text for ent in doc.ents if ent.label_ == "PER"]
-        locations = [ent.text for ent in doc.ents if ent.label_ == "LOC"]
+        initial_extraction = {
+            "persons": persons,
+            "locations": locations,
+            "emails": emails,
+            "phones": phones,
+            "skills": [],
+            "experience": []
+        }
 
-        # Regex for emails and phone numbers
-        emails = re.findall(r'[\w\.-]+@[\w\.-]+', text)
-        phones = re.findall(r'(\d{2}[-\.\s]?){4}\d{2}', text)
+        # --- LLM Refinement ---
+        # The LLM will correct the initial extraction and fill in the missing pieces.
+        refined_entities = refine_extraction_with_llm(text, initial_extraction)
 
-        # For now, skills and experience are placeholders
-        # This can be improved with custom NER models or LLMs
-        skills = []
-        experience = []
-
-        extracted_data = {
+        # This is the final, clean data object we will save
+        final_data_to_save = {
             "filename": file.filename,
-            "entities": {
-                "persons": list(set(persons)),
-                "locations": list(set(locations)),
-                "emails": list(set(emails)),
-                "phones": list(set(phones)),
-                "skills": skills,
-                "experience": experience,
-            },
+            "entities": refined_entities,
             "raw_text": text,
         }
 
@@ -152,7 +151,7 @@ async def upload_cv(file: UploadFile = File(...)):
                 db_response = supabase.table("extractions").insert({
                     "filename": file.filename,
                     "storage_path": file_path,
-                    "data": extracted_data
+                    "data": final_data_to_save
                 }).execute()
 
                 # Get the ID of the newly inserted row
