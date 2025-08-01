@@ -84,12 +84,37 @@ Your final JSON output must follow this exact structure:
 [/INST]
 """
 
-    # --- Step 4.4: API Call (To be built here) ---
-    # In the next step, we will add the code to send this prompt to the API.
+    # --- Step 4.4: API Call ---
+    # We send the request to the Hugging Face Inference API.
+    # We use a timeout to handle cases where the API might be slow to respond.
+    try:
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(API_URL, headers=headers, json={"inputs": prompt})
 
-    print("--- PROMPT ---")
-    print(prompt)
-    print("--- END PROMPT ---")
+        if response.status_code != 200:
+            print(f"Error from Hugging Face API: {response.status_code} - {response.text}")
+            return initial_extraction # Fallback to the initial data
 
-    # For now, we will return the initial data until the API call is implemented.
-    return initial_extraction
+        # The response from the LLM is a list containing a dictionary.
+        llm_output = response.json()[0]['generated_text']
+
+        # The prompt instructs the LLM to only return the JSON, but sometimes it might
+        # still include the prompt itself. We need to find the start of the JSON.
+        json_start_index = llm_output.find('{')
+        if json_start_index == -1:
+            print("Error: LLM did not return a valid JSON object.")
+            return initial_extraction
+
+        # Extract and parse the JSON part of the response
+        json_string = llm_output[json_start_index:]
+        refined_data = json.loads(json_string)
+
+        return refined_data
+
+    except httpx.RequestError as e:
+        print(f"Error making request to Hugging Face API: {e}")
+        return initial_extraction # Fallback to the initial data
+    except json.JSONDecodeError as e:
+        print(f"Error decoding JSON from LLM response: {e}")
+        print(f"Raw LLM output was: {llm_output}")
+        return initial_extraction # Fallback
