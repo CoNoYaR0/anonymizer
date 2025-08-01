@@ -46,6 +46,22 @@ As of now, we have successfully completed the core backend functionality as outl
 *   ➡️ **Phase 4: Intégration d’un LLM open-source**
     *   **Initial Plan:** Use an LLM to parse the raw OCR text directly.
     *   **Revised Plan (Hybrid Approach):** A more sophisticated and efficient approach was adopted. We will use `spaCy` for a fast "first pass" extraction of simple entities. Then, we will feed both the raw text and this initial JSON to an LLM (e.g., Mistral on Hugging Face). The LLM's task will be to refine and complete this JSON, correcting OCR errors and extracting more complex, contextual information like job experiences and skills. This method is more token-efficient and provides more reliable, structured output.
+### LLM Selection & Deduplication (Post-Phase 2)
+
+*   **Objective:** Stabilize the LLM refinement process and improve storage efficiency.
+*   **Challenge (LLM Unavailability):** After implementing the initial LLM refinement logic, extensive testing revealed that the chosen `mistralai` models, and even alternatives like `google/flan-t5-large`, were consistently returning `404 Not Found` errors from the Hugging Face free Inference API. This suggests a potential change in availability for these high-demand models on the free tier.
+*   **Pivot 3 (Stable Fallback Model):** After testing over 70 candidate models, `facebook/bart-large-cnn` was identified as the most reliable model that consistently returned a `200 OK` status. While it is a summarization model, the prompt has been adapted to leverage it for an extraction-like task.
+    *   **Decision:** `facebook/bart-large-cnn` will be used as the default model for the current development and testing phase to ensure the pipeline is functional end-to-end.
+    *   **Future Goal:** The target for the production environment remains a more powerful, instruction-tuned model, likely via a paid service (e.g., GPT-4o or a Hugging Face Pro endpoint).
+*   **Feature (Deduplication):** Implemented a file deduplication system. Before processing, the SHA256 hash of an uploaded PDF is calculated and checked against the database. If the hash exists, the existing `extraction_id` is returned, preventing redundant processing and storage. A `file_hash` column with a unique constraint was added to the `extractions` table.
+
+### To Be Done (Next Steps):
+
+*   ➡️ **Phase 3: Frontend avancé et gestion utilisateur**
+    *   This is the next major part of the project. It involves creating a separate frontend application (e.g., using React) that will consume this backend API.
+*   ➡️ **Phase 4 (Revision): Upgrade LLM for Production**
+    *   Integrate a production-grade LLM (e.g., GPT-4o) via its API.
+    *   This will likely involve adding a new configuration variable for the API key and modifying the `llm_refiner` to handle the new API's request/response format.
 *   ➡️ **Phase 5: Passage en production sécurisée**
     *   **Deployment:** Re-evaluate the deployment strategy for Render. This will likely involve creating a `build.sh` script to install Tesseract and Poppler in the build environment, or choosing a higher-tier plan with more memory.
     *   **CI/CD:** Set up a continuous integration and deployment pipeline (e.g., using GitHub Actions) to automate testing and deployments.

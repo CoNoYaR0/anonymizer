@@ -7,63 +7,46 @@ import logging
 logger = logging.getLogger(__name__)
 
 # --- Configuration ---
-API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
+API_URL = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
 HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
 
 def refine_extraction_with_llm(raw_text: str, initial_extraction: dict) -> tuple[bool, dict]:
     """
     Uses a Large Language Model to refine initial data extraction.
-
-    Args:
-        raw_text: Raw text from OCR.
-        initial_extraction: Dictionary from the initial spaCy extraction.
-
-    Returns:
-        A tuple containing:
-        - bool: True if successful, False otherwise.
-        - dict: The refined data or an error dictionary.
+    Note: Currently uses bart-large-cnn, a summarization model, as a stable placeholder.
     """
     if not HUGGINGFACE_API_KEY:
         logger.warning("HUGGINGFACE_API_KEY not found. Skipping LLM refinement.")
         return True, initial_extraction  # Not a failure, but a skip.
 
     headers = {"Authorization": f"Bearer {HUGGINGFACE_API_KEY}"}
+
+    # Since BART is a summarization model, we frame the task as summarizing the CV into a JSON object.
+    # We provide the initial extraction as context to guide the summary.
     initial_extraction_json = json.dumps(initial_extraction, indent=2)
 
     prompt = f"""
-Task: You are a precise data extraction bot. Your job is to analyze the provided OCR text from a CV and a preliminary JSON object. Correct and complete the JSON object based on the raw text.
+Summarize the following CV text into a structured JSON format. Use the provided "Preliminary JSON" as a guide for the names, emails, and phones to include. Focus on extracting and structuring the work experience and skills.
 
-Instructions:
-1.  Analyze the "Raw OCR Text". It may have errors.
-2.  Use the text to correct and complete the "Preliminary JSON".
-3.  Extract professional experiences, skills, dates, job titles, and technologies.
-4.  Your final output must be ONLY the JSON object. Do not add any explanations or markdown formatting.
-
-JSON Schema to follow:
-{{
-  "persons": ["string"], "locations": ["string"], "emails": ["string"], "phones": ["string"],
-  "skills": [{{ "category": "string", "skills_list": ["string"] }}],
-  "experience": [{{ "job_title": "string", "company_name": "string", "start_date": "string", "end_date": "string", "job_context": "string", "missions": ["string"], "technologies": ["string"] }}]
-}}
-
----
-Input Data:
-
-Raw OCR Text:
-```
+CV Text:
 {raw_text}
-```
 
 Preliminary JSON:
-```json
 {initial_extraction_json}
-```
----
-Final JSON Output:
-"""
-    payload = {"inputs": prompt}
 
-    logger.info("Calling Hugging Face Inference API for refinement...")
+Structured JSON Summary:
+"""
+
+    # BART expects the payload in a slightly different format for summarization
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "do_sample": False,
+            "max_length": 1024 # Increased max length for potentially long CVs
+        }
+    }
+
+    logger.info(f"Calling Hugging Face Inference API ({API_URL}) for refinement...")
     logger.debug(f"API URL: {API_URL}")
     logger.debug(f"Headers: {{'Authorization': 'Bearer [REDACTED]'}}") # Avoid logging the key
     logger.debug(f"Payload: {json.dumps(payload, indent=2)}")

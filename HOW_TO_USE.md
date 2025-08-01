@@ -60,8 +60,10 @@ DEBUG="False"
 ```
 
 *   **`SUPABASE_URL` / `SUPABASE_ANON_KEY`**: Your project's Supabase credentials.
-*   **`HUGGINGFACE_API_KEY`**: Your API key from Hugging Face for LLM refinement.
+*   **`HUGGINGFACE_API_KEY`**: Your API key from Hugging Face. This is used for the LLM refinement step, which currently uses the `facebook/bart-large-cnn` model as a stable placeholder.
 *   **`DEBUG`**: Set to `"True"` to enable detailed debug logging and to receive detailed error messages in API responses. Defaults to `"False"`.
+
+**Note on LLM:** The current default model is a temporary, stable solution. The production target is to use a more powerful model like GPT-4o, which will require different configuration in the future.
 
 **Note:** If you run the application without this file, the Supabase integration will be disabled. The API will still work, but no files will be saved.
 
