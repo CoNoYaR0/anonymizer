@@ -15,9 +15,11 @@ import docx
 from docx.shared import Inches
 import psutil
 from llm_refiner import refine_extraction_with_llm
+from dotenv import load_dotenv, find_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+# find_dotenv() will locate the .env file in the project root
+load_dotenv(find_dotenv())
 
 
 class ExtractedEntities(BaseModel):
