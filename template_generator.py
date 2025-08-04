@@ -40,7 +40,28 @@ def generate_cv_from_template(data: dict) -> io.BytesIO:
     context['skills'] = context.get('skills', [])
 
     # Render the document
-    doc.render(context)
+    try:
+        doc.render(context)
+    except Exception as e:
+        import os
+        import logging
+        logger = logging.getLogger(__name__)
+        DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
+        logger.error(f"Jinja2 Template Syntax Error: {e}")
+
+        if DEBUG:
+            try:
+                # In debug mode, save the raw XML of the template for inspection
+                xml_content = doc.get_xml()
+                debug_path = "templates/debug_template.xml"
+                with open(debug_path, "w", encoding="utf-8") as f:
+                    f.write(xml_content)
+                logger.info(f"Saved raw template XML for debugging to: {debug_path}")
+                logger.info("Inspect this file to find the exact location of the syntax error in your .docx template.")
+            except Exception as debug_exc:
+                logger.error(f"Failed to save debug XML file: {debug_exc}")
+        raise e
+
 
     # Save the document to a byte stream
     file_stream = io.BytesIO()

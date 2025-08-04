@@ -286,3 +286,21 @@ ALTER TABLE public.extractions
 ```
 
 Your backend is now fully configured to work with Supabase!
+
+---
+
+## Debugging Template Errors
+
+When you customize the `templates/cv_template.docx` file, you might accidentally introduce a syntax error in the Jinja2 templating language (e.g., `{{ variable }}` or `{% for item in items %}`). Finding these errors can be difficult because they are inside a `.docx` file.
+
+This application includes a special debugging feature to help you.
+
+### How it Works
+
+1.  **Enable Debug Mode**: In your `.env` file, make sure `DEBUG` is set to `"True"`.
+    ```
+    DEBUG="True"
+    ```
+2.  **Trigger the Error**: Run the application and make a request to the `/anonymize/{id}` endpoint that you know will fail due to the template error.
+3.  **Check for the Debug File**: When the error occurs in debug mode, the server will automatically create a file at `templates/debug_template.xml`.
+4.  **Inspect the File**: Open `debug_template.xml` in a code editor. This file contains the raw XML of your `.docx` template. You can now use your editor's search function (Ctrl+F) to find the exact line with the broken Jinja2 tag and fix it in your `.docx` template.
