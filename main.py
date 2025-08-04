@@ -23,6 +23,7 @@ import docx
 from docx.shared import Inches
 import psutil
 from llm_refiner import refine_extraction_with_llm
+from template_generator import generate_cv_from_template
 
 # Get a logger for the current module
 logger = logging.getLogger(__name__)
@@ -262,28 +263,14 @@ async def anonymize_cv_by_id(extraction_id: int):
             logger.warning(f"Extraction ID: {extraction_id} not found in the database.")
             raise HTTPException(status_code=404, detail="Extraction not found.")
 
-        request_entities = ExtractedEntities(**extraction_data['data']['entities'])
-        request = AnonymizeRequest(
-            filename=extraction_data['data']['filename'],
-            entities=request_entities,
-            raw_text=extraction_data['data']['raw_text']
-        )
-        logger.debug("Successfully reconstructed request data from fetched record.")
+        # The full extraction_data (which includes the 'data' key) is passed to the generator.
+        logger.info("Generating final CV from template...")
+        doc_io = generate_cv_from_template(extraction_data)
+        logger.info("Templated DOCX document generated successfully.")
 
-        logger.info("Anonymizing text...")
-        anonymized_text = anonymize_text(request.raw_text, request.entities)
-        logger.info("Text anonymization complete.")
-
-        logger.info("Generating DOCX document...")
-        doc = docx.Document()
-        doc.add_heading('CV Anonymisé', 0)
-        doc.add_paragraph(anonymized_text)
-        doc_io = io.BytesIO()
-        doc.save(doc_io)
-        doc_io.seek(0)
-        logger.info("DOCX document generated successfully.")
-
-        anonymized_filename = f"anonymized_{request.filename.replace('.pdf', '.docx')}"
+        # Use the original filename to create the new anonymized filename
+        original_filename = extraction_data.get('data', {}).get('filename', 'cv.pdf')
+        anonymized_filename = f"anonymized_{original_filename.replace('.pdf', '.docx')}"
         file_path = f"anonymized_cvs/{uuid.uuid4()}_{anonymized_filename}"
 
         logger.info(f"Uploading anonymized DOCX to Supabase at path: {file_path}")
