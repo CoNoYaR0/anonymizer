@@ -80,11 +80,12 @@ As of now, we have successfully completed the core backend functionality as outl
 ### Feature: DOCX to Jinja2 Template Converter
 
 *   **Objective:** Fulfill the user request to build a standalone tool for converting completed `.docx` CVs into `docxtpl`-compatible Jinja2 templates.
-*   **Implementation:**
-    *   **New Module (`docx_to_template_converter.py`):** Created a new module to house the core conversion logic. It uses `spaCy` and regex to identify dynamic content and `python-docx` to perform the replacements. The entity extraction logic was specifically hardened to be more robust against common NER model errors.
-    *   **New Endpoint (`/convert-to-template`):** Added a new `POST` endpoint to `main.py` that handles `.docx` file uploads, orchestrates the conversion process, and returns the generated template file for download.
-    *   **Web Interface (`/converter`):** Added a simple, user-friendly HTML page with a drag-and-drop form to make the feature accessible to non-technical users.
-    *   **Testing:** Created a new test suite (`tests/test_converter.py`) using `pytest` to provide integration testing for the new feature, ensuring its reliability.
+*   **Final Architecture (Multi-Stage LLM Pipeline):** After initial implementation, the feature was completely re-architected to ensure a deterministic and high-quality output, addressing issues with randomness and template correctness. The final pipeline now includes:
+    *   **Stage 1 (LLM Semantic Analysis):** The system uses a powerful prompt to have an LLM generate a "semantic map" of the document, defining not only simple placeholder swaps but also complex, multi-paragraph blocks that should be replaced with Jinja2 `for` loops.
+    *   **Stage 2 (Robust Annotation Engine):** A robust replacement engine was developed that can search for and replace multi-paragraph blocks of text across the entire document, including within tables. This was a critical fix to ensure the LLM's instructions could be applied correctly.
+    *   **Stage 3 (LLM QA Review):** A new `template_qa.py` module was created to act as a final safety net. It uses a second, specialized LLM call to validate the generated template against a strict set of syntax and convention rules, guaranteeing that no invalid or broken templates are ever sent to the user.
+*   **Frontend Enhancements:** The frontend was updated with functional JavaScript for drag-and-drop and to gracefully handle and display detailed error messages from the backend (e.g., from a failed QA review).
+*   **Testing:** The test suite was updated to use `monkeypatch` to mock all external LLM calls, allowing for fast, deterministic, and cost-effective testing of the entire pipeline.
 *   **Git Hygiene:**
     *   Resolved a merge conflict caused by a cached `__pycache__` file.
     *   Updated the `.gitignore` file to properly ignore `__pycache__` directories, preventing similar issues in the future.
