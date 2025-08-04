@@ -20,24 +20,47 @@ def generate_cv_from_template(data: dict) -> io.BytesIO:
         raise FileNotFoundError(f"Template not found at '{TEMPLATE_PATH}'. Please run the `create_template.py` script first.") from e
 
     # Prepare the context for Jinja2 rendering
-    # The 'data' object from the DB is nested, so we extract the entities
     entities = data.get('data', {}).get('entities', {})
+    context = {}
 
-    context = entities.copy()
-
-    # Calculate initials
-    persons = context.get('persons', [])
+    # --- Personal Info ---
+    persons = entities.get('persons', [])
     if persons:
-        # Assuming the first person is the main subject
         full_name = persons[0]
-        initials = "".join([name[0].upper() for name in full_name.split()])
-        context['initiales'] = initials
+        context['initials'] = "".join([name[0].upper() for name in full_name.split()])
+        context['title'] = entities.get('titles', ["N/A"])[0]
     else:
-        context['initiales'] = "N/A"
+        context['initials'] = "N/A"
+        context['title'] = "N/A"
 
-    # docxtpl can handle loops, so we pass the lists directly
-    context['experiences'] = context.get('experience', [])
-    context['skills'] = context.get('skills', [])
+    # --- Experience ---
+    experiences = entities.get('experience', [])
+    context['experiences'] = experiences
+
+    total_experience_years = 0
+    if experiences:
+        # Assuming experiences are sorted chronologically
+        context['current_company'] = experiences[0].get('company', 'N/A')
+        for exp in experiences:
+            # Simple parsing of 'period' (e.g., "2 years 5 months")
+            try:
+                years = int(exp.get('period', '0').split(' ')[0])
+                total_experience_years += years
+            except (ValueError, IndexError):
+                pass # Ignore if period is not in the expected format
+    else:
+        context['current_company'] = "N/A"
+
+    context['experience_years'] = total_experience_years
+
+    # --- Certifications & Formations ---
+    context['certifications'] = entities.get('certifications', [])
+
+    # --- Skills ---
+    context['skills'] = entities.get('skills', {})
+
+    # --- Languages ---
+    context['languages'] = entities.get('languages', [])
 
     # Render the document
     try:
