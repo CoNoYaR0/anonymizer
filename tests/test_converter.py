@@ -12,23 +12,22 @@ client = TestClient(app)
 @pytest.fixture
 def sample_docx_stream() -> io.BytesIO:
     """
-    Creates a sample .docx file in memory with placeholder text
-    and returns it as a BytesIO stream.
+    Creates a sample .docx file in memory with text that matches
+    the mock_structured_data.
     """
     document = docx.Document()
-    document.add_heading('CV of Jean Dupont', level=1)
-    document.add_paragraph("This CV belongs to Jean Dupont.")
-    document.add_paragraph(
-        "Contact: jean.dupont@email.com or call 01 23 45 67 89."
-    )
-    document.add_paragraph(
-        "I am a skilled professional living in Paris."
-    )
-    document.add_paragraph(
-        "My friend, Marie Curie, also recommends me."
-    )
+    document.add_paragraph("Jean Dupont") # "name"
+    document.add_paragraph("Développeur") # "job_title"
+    document.add_paragraph("Contact: jean.dupont@email.com") # "contact.email"
 
-    # Save the document to a byte stream
+    # Add the block that will be replaced
+    document.add_paragraph("Développeuse Web – fullstack")
+    document.add_paragraph("Creative Web")
+    document.add_paragraph("Octobre 2018 - Octobre 2025")
+    document.add_paragraph("MISSIONS :")
+    document.add_paragraph("Refonte complète et maintenance d’un CMS")
+    document.add_paragraph("Développement backend d’API REST")
+
     stream = io.BytesIO()
     document.save(stream)
     stream.seek(0)
@@ -39,27 +38,34 @@ def test_convert_to_template_endpoint_success(sample_docx_stream: io.BytesIO, mo
     Tests the /convert-to-template endpoint with a valid .docx file,
     mocking the LLM call to ensure deterministic results.
     """
-    # 1. Define the mock function and its return value
-    mock_semantic_map = {
-        "Jean Dupont": "{{ name }}",
-        "Marie Curie": "{{ person }}",
-        "jean.dupont@email.com": "{{ email }}",
-        "01 23 45 67 89": "{{ phone }}",
-        "Paris": "{{ location }}"
+    # 1. Define the mock structured data that the LLM would return
+    mock_structured_data = {
+        "name": "Jean Dupont",
+        "job_title": "Développeur",
+        "contact": {
+            "email": "jean.dupont@email.com",
+            "phone": "01 23 45 67 89"
+        },
+        "experiences": [
+            {
+                "title": "Développeuse Web – fullstack",
+                "company": "Creative Web",
+                "period": "Octobre 2018 - Octobre 2025",
+                "tasks": [
+                    "Refonte complète et maintenance d’un CMS",
+                    "Développement backend d’API REST"
+                ]
+            }
+        ]
     }
 
-    def mock_get_map_from_llm(text: str):
-        # In a real test, you might want to return a more complex
-        # object here to test block replacements. For now, this is fine.
-        return {
-            "simple_replacements": mock_semantic_map,
-            "block_replacements": []
-        }
+    def mock_get_structured_data(text: str):
+        return mock_structured_data
 
-    # 2. Apply the mock to the Stage 1 and Stage 3 functions
+    # 2. Apply the mocks
     monkeypatch.setattr(
-        "docx_to_template_converter._get_semantic_map_from_llm",
-        mock_get_map_from_llm
+        "docx_to_template_converter._get_structured_data_from_llm",
+        mock_get_structured_data
     )
     monkeypatch.setattr(
         "main.validate_template_with_llm",
@@ -81,19 +87,22 @@ def test_convert_to_template_endpoint_success(sample_docx_stream: io.BytesIO, mo
     returned_text = "\n".join([p.text for p in returned_doc.paragraphs])
     print(f"Returned text:\n---\n{returned_text}\n---")
 
-    # Check for placeholder replacement
-    assert "{{ name }}" in returned_text
-    assert "{{ email }}" in returned_text
-    assert "{{ phone }}" in returned_text
-    assert "{{ location }}" in returned_text
-    assert "{{ person }}" in returned_text
+    # Check for simple replacements
+    assert "{{ user_initials }}" in returned_text
+    assert "{{ job_title }}" in returned_text
+    assert "Contact: {{ email }}" in returned_text
+
+    # Check for block replacement
+    assert "{% for job in experiences %}" in returned_text
+    assert "{{ job.title }}" in returned_text
+    assert "{{ job.company }}" in returned_text
+    assert "{% for task in job.tasks %}" in returned_text
+    assert "{% endfor %}" in returned_text
 
     # Check that original data is gone
     assert "Jean Dupont" not in returned_text
-    assert "jean.dupont@email.com" not in returned_text
-    assert "01 23 45 67 89" not in returned_text
-    assert "Paris" not in returned_text
-    assert "Marie Curie" not in returned_text
+    assert "Développeur" not in returned_text
+    assert "Creative Web" not in returned_text
 
 def test_convert_to_template_endpoint_invalid_file_type():
     """
