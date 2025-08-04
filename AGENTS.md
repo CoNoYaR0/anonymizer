@@ -39,14 +39,14 @@ The application follows a sequential pipeline model. Here is the typical flow fo
 - **Dependencies**: `fastapi`, `uvicorn`, `pytesseract`, `spacy`, `supabase-py`, `python-docx`.
 
 ### `llm_refiner.py`
-- **Responsibility**: Handles all interaction with the external Large Language Model (LLM) via the Hugging Face Inference API.
+- **Responsibility**: Handles all interaction with the OpenAI API for data refinement.
 - **Key Function**: `refine_extraction_with_llm(raw_text, initial_extraction)`
 - **Data Structures**:
     - **Input**: A raw text string and a dictionary (`initial_extraction`) containing entities found by `spaCy`.
     - **Output**: Returns a tuple `(success: bool, result: dict)`. If `success` is `False`, the dictionary contains error details. If `True`, it contains the refined data.
 - **Models**:
-    - **Default (Testing)**: `facebook/bart-large-cnn`
-    - **Target (Production)**: GPT-4o (to be implemented later).
+    - **Current**: `gpt-4o`
+- **Prompting Strategy**: A detailed system prompt instructs the model to not only extract data but also to actively clean and refine it. This includes correcting OCR errors, removing artifacts, and reformulating text for clarity. The model is constrained to output a valid JSON object using the `json_object` response format.
 
 ### `logger_config.py`
 - **Responsibility**: Configures the application-wide logger.
