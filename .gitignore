@@ -1,4 +1,4 @@
 # scrip comit
 git-auto-push.ps1
 # .env
-.env
+.env\n# Python cache files\n__pycache__/
