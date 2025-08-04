@@ -13,3 +13,4 @@ PyMuPDF
 psutil
 httpx
 rich
+openai

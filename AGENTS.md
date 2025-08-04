@@ -74,5 +74,5 @@ The application is configured via a `.env` file in the root directory.
 
 - `SUPABASE_URL`: The URL of your Supabase project.
 - `SUPABASE_ANON_KEY`: The public "anon" key for your Supabase project.
-- `HUGGINGFACE_API_KEY`: Your API token for authenticating with the Hugging Face Inference API.
+- `OPENAI_API_KEY`: Your API key from OpenAI, used for the GPT-4o refinement process.
 - `DEBUG`: Set to `"True"` to enable debug-level logging and more verbose error responses.
