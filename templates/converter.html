@@ -92,6 +92,17 @@
             border-radius: 3px;
             font-family: "Courier New", Courier, monospace;
         }
+        #error-message {
+            color: #e74c3c;
+            background-color: #fbeaea;
+            border: 1px solid #e74c3c;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            width: 95%;
+            text-align: center;
+            display: none; /* Hidden by default */
+        }
     </style>
 </head>
 <body>
@@ -100,7 +111,6 @@
         <p class="instructions">
             Upload a completed CV in .docx format. The system will automatically detect personal information
             (names, emails, locations) and replace it with Jinja2 placeholders like <code>{{ name }}</code>.
-            The converted file will be downloaded automatically.
         </p>
         <form action="/convert-to-template" method="post" enctype="multipart/form-data" id="upload-form">
             <div class="file-upload-wrapper" id="drop-zone">
@@ -112,14 +122,17 @@
             </div>
             <button type="submit">Convert and Download</button>
         </form>
+        <div id="error-message"></div>
     </div>
 
     <script>
+        const form = document.getElementById('upload-form');
         const dropZone = document.getElementById('drop-zone');
         const fileInput = document.getElementById('file-input');
         const fileLabel = document.getElementById('file-label');
+        const errorMessageDiv = document.getElementById('error-message');
 
-        // Prevent default drag behaviors
+        // --- Drag and Drop Logic ---
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, preventDefaults, false);
             document.body.addEventListener(eventName, preventDefaults, false);
@@ -130,7 +143,6 @@
             e.stopPropagation();
         }
 
-        // Highlight drop zone when item is dragged over it
         ['dragenter', 'dragover'].forEach(eventName => {
             dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
         });
@@ -139,32 +151,89 @@
             dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
         });
 
-        // Handle dropped files
         dropZone.addEventListener('drop', handleDrop, false);
-
         function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            handleFiles(files);
+            fileInput.files = e.dataTransfer.files;
+            handleFiles(fileInput.files);
         }
 
-        // Handle file selection via click
-        fileInput.addEventListener('change', function() {
-            handleFiles(this.files);
-        });
+        // --- File Selection and Label Update ---
+        fileInput.addEventListener('change', () => handleFiles(fileInput.files));
 
         function handleFiles(files) {
+            errorMessageDiv.style.display = 'none'; // Hide error on new file selection
             if (files.length > 0) {
-                // We only handle the first file
                 const file = files[0];
                 if (file.name.endsWith('.docx')) {
-                    fileInput.files = files; // Assign the file to the input
                     fileLabel.innerHTML = `<strong>Selected file:</strong><span>${file.name}</span>`;
                 } else {
                     fileLabel.innerHTML = `<strong>Invalid file type.</strong><span>Please select a .docx file.</span>`;
-                    fileInput.value = ''; // Clear the input
+                    fileInput.value = '';
                 }
+            } else {
+                 fileLabel.innerHTML = `<strong>Click to select a file</strong><span>or drag and drop it here</span>`;
             }
+        }
+
+        // --- Form Submission Logic ---
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault(); // Prevent default form submission
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                showError("Please select a file to upload.");
+                return;
+            }
+
+            const formData = new FormData(form);
+            const button = form.querySelector('button');
+            button.textContent = 'Processing...';
+            button.disabled = true;
+
+            try {
+                const response = await fetch('/convert-to-template', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    // Success - trigger file download
+                    const blob = await response.blob();
+                    const header = response.headers.get('Content-Disposition');
+                    const parts = header.split(';');
+                    let filename = 'template.docx';
+                    parts.forEach(part => {
+                        if (part.trim().startsWith('filename=')) {
+                            filename = part.split('=')[1].replace(/"/g, '');
+                        }
+                    });
+
+                    const link = document.createElement('a');
+                    link.href = window.URL.createObjectURL(blob);
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    // Reset form
+                    fileInput.value = '';
+                    handleFiles([]);
+
+                } else {
+                    // Error - display message
+                    const errorData = await response.json();
+                    showError(errorData.error || 'An unknown error occurred.');
+                }
+            } catch (error) {
+                showError('An unexpected network error occurred. Please try again.');
+            } finally {
+                button.textContent = 'Convert and Download';
+                button.disabled = false;
+            }
+        });
+
+        function showError(message) {
+            errorMessageDiv.textContent = message;
+            errorMessageDiv.style.display = 'block';
         }
     </script>
 </body>

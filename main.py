@@ -12,7 +12,7 @@ import re
 import uuid
 import hashlib
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 import pytesseract
 from pdf2image import convert_from_bytes
@@ -312,7 +312,8 @@ async def convert_cv_to_template(file: UploadFile = File(...)):
     logger.info(f"Received file '{file.filename}' for template conversion.")
     if file.content_type != "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         logger.warning(f"Invalid file type '{file.content_type}' received.")
-        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a .docx file.")
+        error_message = "Invalid file type. Please upload a valid .docx file."
+        return JSONResponse(status_code=400, content={"error": error_message})
 
     try:
         docx_bytes = await file.read()
@@ -340,8 +341,12 @@ async def convert_cv_to_template(file: UploadFile = File(...)):
 
     except ValueError as ve:
         # Handle specific errors raised from the converter, like corrupted files
-        logger.error(f"Value error during template conversion: {ve}", exc_info=True)
-        raise HTTPException(status_code=400, detail=str(ve))
+        logger.error(f"Value error during template conversion: {ve}", exc_info=False) # No need for full stack trace here
+        error_message = (
+            "Could not process the .docx file. It may be corrupted, an older format (.doc), "
+            "or not a standard .docx file. Please try re-saving it in Microsoft Word and uploading again."
+        )
+        return JSONResponse(status_code=400, content={"error": error_message})
     except Exception as e:
         logger.critical(f"An unexpected error occurred during template conversion for '{file.filename}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="An unexpected error occurred during template conversion.")
+        return JSONResponse(status_code=500, content={"error": "An unexpected server error occurred."})
