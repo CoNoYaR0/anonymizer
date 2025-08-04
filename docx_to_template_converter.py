@@ -107,48 +107,57 @@ def _replace_text_in_paragraph(paragraph: 'docx.text.paragraph.Paragraph', repla
                 if old in run.text:
                     run.text = run.text.replace(old, new)
 
+def _delete_paragraph(paragraph):
+    """Helper function to delete a paragraph from its parent."""
+    p = paragraph._element
+    p.getparent().remove(p)
+    paragraph._p = paragraph._element = None
+
 def _replace_text_block(doc: docx.document.Document, original_block: str, new_block: str):
     """
     Finds a multi-paragraph block of text and replaces it with new content.
-    This is a challenging operation and this is a simplified implementation.
+    This implementation is more robust and handles block matching across paragraphs.
     """
-    logger.info(f"Attempting to replace block starting with: '{original_block[:50]}...'")
+    logger.info(f"Attempting to replace block starting with: '{original_block.splitlines()[0] if original_block else ''}...'")
 
-    all_paras = doc.paragraphs
-    full_text = "\n".join([p.text for p in all_paras])
+    # Normalize both the search block and document text for comparison
+    normalized_original_block = "\n".join(line.strip() for line in original_block.splitlines() if line.strip())
 
-    if original_block not in full_text:
-        logger.warning("Block to be replaced was not found in the document.")
-        return
+    paragraphs = doc.paragraphs
+    for i in range(len(paragraphs)):
+        # Find a potential starting paragraph
+        if paragraphs[i].text.strip() == normalized_original_block.split('\n')[0]:
 
-    # This is a very simplified approach: find the first paragraph of the block
-    # and replace its content, then delete subsequent paragraphs if they match.
-    # A truly robust implementation would be much more complex.
+            # Potential match found, now check if the subsequent paragraphs form the complete block
+            collected_paras = []
+            collected_text = []
 
-    block_lines = original_block.split('\n')
-    start_para_index = -1
+            for j in range(i, len(paragraphs)):
+                para_text = paragraphs[j].text.strip()
+                if not para_text: continue # Skip empty paragraphs in collection
 
-    for i, p in enumerate(all_paras):
-        if block_lines[0] in p.text:
-            start_para_index = i
-            break
+                collected_paras.append(paragraphs[j])
+                collected_text.append(para_text)
 
-    if start_para_index == -1:
-        logger.warning("Could not find the starting paragraph of the block.")
-        return
+                current_block_text = "\n".join(collected_text)
 
-    # Heuristic: Assume the block is contiguous from the start point.
-    # Replace the first paragraph and delete the rest.
-    p_start = all_paras[start_para_index]
-    p_start.text = new_block
-    # Clear any remaining runs to ensure old text is gone
-    for run in p_start.runs[1:]:
-        run.text = ''
+                # Check if we have found the full block
+                if current_block_text == normalized_original_block:
+                    logger.info(f"Found matching block of {len(collected_paras)} paragraphs. Replacing.")
 
-    # Delete subsequent paragraphs that were part of the old block
-    # This is risky and complex. For now, we will only replace the first line
-    # and expect the LLM to provide a single-line new_block for safety.
-    logger.info(f"Replaced starting paragraph of block with new content.")
+                    # Replace the first paragraph with the new content
+                    first_para = collected_paras[0]
+                    first_para.text = '' # Clear existing content
+                    first_para.add_run(new_block)
+
+                    # Delete the rest of the original paragraphs in the block
+                    for para_to_delete in collected_paras[1:]:
+                        _delete_paragraph(para_to_delete)
+
+                    logger.info("Block replacement successful.")
+                    return # Exit after the first successful replacement
+
+    logger.warning("Could not find a matching block in the document to replace.")
 
 
 def stage2_apply_annotations(docx_stream: io.BytesIO, semantic_map: dict) -> io.BytesIO:
