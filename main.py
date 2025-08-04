@@ -30,13 +30,28 @@ logger = logging.getLogger(__name__)
 # --- Environment-based Configuration ---
 DEBUG_MODE = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 
+# --- Pydantic Models for Data Validation ---
+
+class SkillCategory(BaseModel):
+    category: str
+    skills_list: list[str]
+
+class Experience(BaseModel):
+    job_title: str
+    company_name: str
+    start_date: str
+    end_date: str
+    job_context: str
+    missions: list[str]
+    technologies: list[str]
+
 class ExtractedEntities(BaseModel):
     persons: list[str] = Field(..., example=["Jean Dupont"])
     locations: list[str] = Field(..., example=["Paris"])
     emails: list[str] = Field(..., example=["jean.dupont@example.com"])
     phones: list[str] = Field(..., example=["01 23 45 67 89"])
-    skills: list[str] = Field(..., example=["Python", "FastAPI"])
-    experience: list[str] = Field(..., example=["Développeur chez Example Corp"])
+    skills: list[SkillCategory] = Field(..., example=[{"category": "Languages", "skills_list": ["Python", "JavaScript"]}])
+    experience: list[Experience] = Field(..., example=[{"job_title": "Software Engineer", "company_name": "Example Corp", "start_date": "Jan 2020", "end_date": "Present", "job_context": "Developing awesome things.", "missions": ["Build feature X"], "technologies": ["Python", "FastAPI"]}])
 
 class AnonymizeRequest(BaseModel):
     filename: str
