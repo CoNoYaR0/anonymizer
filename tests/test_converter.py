@@ -34,14 +34,31 @@ def sample_docx_stream() -> io.BytesIO:
     stream.seek(0)
     return stream
 
-def test_convert_to_template_endpoint_success(sample_docx_stream: io.BytesIO):
+def test_convert_to_template_endpoint_success(sample_docx_stream: io.BytesIO, monkeypatch):
     """
-    Tests the /convert-to-template endpoint with a valid .docx file.
+    Tests the /convert-to-template endpoint with a valid .docx file,
+    mocking the LLM call to ensure deterministic results.
     """
-    # Define what the file should look like for the 'files' parameter
-    files = {'file': ('sample_cv.docx', sample_docx_stream, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
+    # 1. Define the mock function and its return value
+    mock_semantic_map = {
+        "Jean Dupont": "{{ name }}",
+        "Marie Curie": "{{ person }}",
+        "jean.dupont@email.com": "{{ email }}",
+        "01 23 45 67 89": "{{ phone }}",
+        "Paris": "{{ location }}"
+    }
 
-    # Post the file to the endpoint
+    def mock_get_map_from_llm(text: str):
+        return mock_semantic_map
+
+    # 2. Apply the mock to the function in the converter module
+    monkeypatch.setattr(
+        "docx_to_template_converter._get_semantic_map_from_llm",
+        mock_get_map_from_llm
+    )
+
+    # 3. Run the test with the mock in place
+    files = {'file': ('sample_cv.docx', sample_docx_stream, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')}
     response = client.post("/convert-to-template", files=files)
 
     # --- Assertions ---
@@ -52,7 +69,6 @@ def test_convert_to_template_endpoint_success(sample_docx_stream: io.BytesIO):
     response_stream = io.BytesIO(response.content)
     returned_doc = docx.Document(response_stream)
 
-    # Extract all text from the returned document
     returned_text = "\n".join([p.text for p in returned_doc.paragraphs])
     print(f"Returned text:\n---\n{returned_text}\n---")
 
@@ -60,7 +76,6 @@ def test_convert_to_template_endpoint_success(sample_docx_stream: io.BytesIO):
     assert "{{ name }}" in returned_text
     assert "{{ email }}" in returned_text
     assert "{{ phone }}" in returned_text
-    # "Paris" and "Marie Curie" should be replaced
     assert "{{ location }}" in returned_text
     assert "{{ person }}" in returned_text
 

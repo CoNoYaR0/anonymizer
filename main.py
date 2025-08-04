@@ -321,7 +321,8 @@ async def convert_cv_to_template(file: UploadFile = File(...)):
 
         # The nlp model is already loaded globally
         logger.info("Starting template conversion process...")
-        template_stream = convert_docx_to_template(docx_stream, nlp)
+        # By default, use the LLM-powered pipeline
+        template_stream = convert_docx_to_template(docx_stream, nlp, use_llm=True)
         logger.info("Template conversion process finished.")
 
         # Create a new filename for the template
