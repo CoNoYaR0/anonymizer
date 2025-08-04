@@ -82,4 +82,4 @@ def test_convert_to_template_endpoint_invalid_file_type():
     response = client.post("/convert-to-template", files=files)
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "Invalid file type. Please upload a .docx file."}
+    assert response.json() == {"error": "Invalid file type. Please upload a valid .docx file."}
