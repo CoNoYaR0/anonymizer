@@ -91,7 +91,6 @@ def stage1_get_semantic_map(text: str, use_llm: bool = True) -> dict:
     if use_llm:
         return _get_semantic_map_from_llm(text)
     else:
-        # Fallback to a simpler, non-LLM method is no longer supported with this architecture
         logger.warning("[Stage 1] Non-LLM method is not supported for this advanced templating. LLM is required.")
         return {"simple_replacements": {}, "block_replacements": []}
 
@@ -101,8 +100,6 @@ def _replace_text_in_paragraph(paragraph: 'docx.text.paragraph.Paragraph', repla
     sorted_replacements = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
     for old, new in sorted_replacements:
         if old in paragraph.text:
-            # This is a simplified approach. A more robust solution would handle
-            # replacements spanning multiple runs.
             for run in paragraph.runs:
                 if old in run.text:
                     run.text = run.text.replace(old, new)
@@ -113,57 +110,38 @@ def _delete_paragraph(paragraph):
     p.getparent().remove(p)
     paragraph._p = paragraph._element = None
 
-def _replace_text_block(doc: docx.document.Document, original_block: str, new_block: str):
+def _replace_text_block(paragraphs: list, original_block: str, new_block: str):
     """
-    Finds a multi-paragraph block of text and replaces it with new content.
-    This implementation is more robust and handles block matching across paragraphs.
+    Finds a multi-paragraph block of text within a list of paragraphs and replaces it.
     """
     logger.info(f"Attempting to replace block starting with: '{original_block.splitlines()[0] if original_block else ''}...'")
-
-    # Normalize both the search block and document text for comparison
     normalized_original_block = "\n".join(line.strip() for line in original_block.splitlines() if line.strip())
 
-    paragraphs = doc.paragraphs
     for i in range(len(paragraphs)):
-        # Find a potential starting paragraph
         if paragraphs[i].text.strip() == normalized_original_block.split('\n')[0]:
-
-            # Potential match found, now check if the subsequent paragraphs form the complete block
             collected_paras = []
             collected_text = []
-
             for j in range(i, len(paragraphs)):
                 para_text = paragraphs[j].text.strip()
-                if not para_text: continue # Skip empty paragraphs in collection
-
+                if not para_text: continue
                 collected_paras.append(paragraphs[j])
                 collected_text.append(para_text)
-
                 current_block_text = "\n".join(collected_text)
-
-                # Check if we have found the full block
                 if current_block_text == normalized_original_block:
                     logger.info(f"Found matching block of {len(collected_paras)} paragraphs. Replacing.")
-
-                    # Replace the first paragraph with the new content
                     first_para = collected_paras[0]
-                    first_para.text = '' # Clear existing content
+                    first_para.text = ''
                     first_para.add_run(new_block)
-
-                    # Delete the rest of the original paragraphs in the block
                     for para_to_delete in collected_paras[1:]:
                         _delete_paragraph(para_to_delete)
-
                     logger.info("Block replacement successful.")
-                    return # Exit after the first successful replacement
-
+                    return True
     logger.warning("Could not find a matching block in the document to replace.")
-
+    return False
 
 def stage2_apply_annotations(docx_stream: io.BytesIO, semantic_map: dict) -> io.BytesIO:
     """
     STAGE 2: Takes a .docx file and a semantic map, and applies the annotations.
-    Handles both simple and complex block replacements.
     """
     logger.info("[Stage 2] Applying annotations to DOCX.")
     try:
@@ -172,22 +150,37 @@ def stage2_apply_annotations(docx_stream: io.BytesIO, semantic_map: dict) -> io.
         logger.error(f"[Stage 2] Failed to load .docx file: {e}", exc_info=True)
         raise ValueError("Invalid or corrupted .docx file.")
 
+    # Create a single list of all paragraphs in the document, in order
+    all_paragraphs = []
+    for para in doc.paragraphs:
+        all_paragraphs.append(para)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    all_paragraphs.append(para)
+
     # Handle simple replacements first
     simple_replacements = semantic_map.get("simple_replacements", {})
     if simple_replacements:
-        for paragraph in doc.paragraphs:
+        for paragraph in all_paragraphs:
             _replace_text_in_paragraph(paragraph, simple_replacements)
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    for paragraph in cell.paragraphs:
-                        _replace_text_in_paragraph(paragraph, simple_replacements)
 
     # Handle block replacements
     block_replacements = semantic_map.get("block_replacements", [])
     if block_replacements:
         for block in block_replacements:
-            _replace_text_block(doc, block["original_block"], block["new_block"])
+            # We need to re-fetch all paragraphs for each block replacement as the
+            # document structure changes after deletion.
+            current_paragraphs = []
+            for para in doc.paragraphs:
+                current_paragraphs.append(para)
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for para in cell.paragraphs:
+                            current_paragraphs.append(para)
+            _replace_text_block(current_paragraphs, block["original_block"], block["new_block"])
 
     target_stream = io.BytesIO()
     doc.save(target_stream)
