@@ -64,7 +64,11 @@ As of now, we have successfully completed the core backend functionality as outl
     *   **Decision:** The final decision was made to pivot from free, unreliable Hugging Face models to the official OpenAI API using `gpt-4o`. This provides a massive leap in quality, reliability, and instruction-following capabilities.
     *   **Implementation:** The `llm_refiner.py` module was completely refactored to use the `openai` Python library. It now requires an `OPENAI_API_KEY` environment variable.
     *   **Prompt Engineering:** The system prompt for GPT-4o was significantly enhanced. It now explicitly instructs the model to perform cleaning (removing OCR artifacts, fixing typos) and reformulation (improving clarity) in addition to data extraction. This leverages the full power of the LLM to ensure the final JSON is clean and professional. This completes the core objective of Phase 4.
-*   ➡️ **Phase 5: Passage en production sécurisée**
+*   ➡️ **Phase 5: Templating and Final Document Generation**
+    *   **Implementation:** A `Dossier_competences_OHA.docx` file was converted into a dynamic Jinja2 template (`cv_template.docx`). This was a manual process, verified by converting the `.docx` to `.xml` for review.
+    *   A new `template_generator.py` module was created to handle rendering the template using the `docxtpl` library.
+    *   The `/anonymize` endpoint was updated to use this new generator, completing the end-to-end pipeline from PDF upload to a fully formatted, anonymized `.docx` document.
+*   ➡️ **Phase 6: Passage en production sécurisée**
     *   **Deployment:** Re-evaluate the deployment strategy for Render. This will likely involve creating a `build.sh` script to install Tesseract and Poppler in the build environment, or choosing a higher-tier plan with more memory.
     *   **CI/CD:** Set up a continuous integration and deployment pipeline (e.g., using GitHub Actions) to automate testing and deployments.
     *   **Security & Compliance:** Implement logging, data retention policies (e.g., auto-deleting CVs after 30 days), and other security measures to ensure GDPR compliance.
