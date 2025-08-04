@@ -36,22 +36,40 @@ def _get_semantic_map_from_llm(text: str) -> dict[str, str]:
     client = OpenAI()
 
     system_prompt = """
-You are an expert CV analyst. Your task is to read the provided CV text and identify all dynamic, personal, or project-specific pieces of information that should be replaced with Jinja2 placeholders to create a reusable template.
+You are an expert CV analyst. Your task is to read the provided CV text and generate a JSON object that maps specific text fragments to their corresponding Jinja2 placeholders.
 
-**Instructions:**
-1.  **Identify all replaceable entities:** This includes names, contact details (email, phone), locations, company names, project names, specific dates, and technologies/skills.
-2.  **Propose Jinja2 variables:** For each entity, suggest a clear and consistent Jinja2 placeholder.
-    - The main person's name should be `{{ name }}`.
-    - Their primary email should be `{{ email }}`.
-    - Other entities should have logical names (e.g., `{{ company_name }}`, `{{ project_name }}`, `{{ skill }}`).
-3.  **Output Format:** Your output MUST be a valid JSON object. The keys of the JSON object are the exact strings to be replaced from the original text, and the values are the corresponding Jinja2 placeholders.
+**CV Structure and Naming Conventions:**
 
-**Example:**
-If the input text is "John Doe worked at Acme Corp...", your output should include:
-{
-  "John Doe": "{{ name }}",
-  "Acme Corp": "{{ company_name }}"
-}
+1.  **Header Section:**
+    -   **Initials:** The acronym at the top (e.g., "RIN") maps to `{{ user_initials }}`.
+    -   **Job Title:** e.g., "Développeuse web expérimentée" -> `{{ job_title }}`.
+    -   **Experience Years:** e.g., "9 ans" -> `{{ years_of_experience }}`.
+    -   **Client:** e.g., "Creative Web" -> `{{ current_client }}`.
+
+2.  **Education & Certifications Table:**
+    -   This section should be treated as a loop. Do not create placeholders for individual entries. Instead, identify the entire repeating block. For now, focus on simple text replacements. Advanced loop creation is a future step.
+
+3.  **Technical Skills Block:**
+    -   For each category (Backend, Frontend, etc.), map the list of skills to a single placeholder.
+    -   Example: "PHP, Symfony, Laravel" -> `{{ backend_technologies | join(', ') }}`.
+
+4.  **Professional Experience Section (Page 2):**
+    -   This section contains multiple jobs and should be looped over with `{% for job in experiences %}`.
+    -   For each job, identify:
+        -   Job Title: e.g., "Développeuse Web — fullstack" -> `{{ job.title }}`.
+        -   Company: `{{ job.company }}`.
+        -   Dates: `{{ job.start_date }}`, `{{ job.end_date }}`.
+        -   Tasks/Missions: These should be part of a nested loop `{% for task in job.tasks %}`.
+
+**Your Task:**
+
+-   Analyze the user-provided CV text.
+-   Identify all text fragments that correspond to the fields listed above.
+-   Create a JSON object where each key is the **exact text to be replaced** and the value is the **correct Jinja2 placeholder** according to the rules.
+-   Do NOT invent placeholders. Only use the ones specified.
+-   If a section should be a loop (like experiences), identify the individual elements for now (e.g., the first job title, first company name) for simple replacement. The full loop structure will be handled later.
+
+**Output Format:** Your output MUST be ONLY a valid JSON object.
 """
     try:
         response = client.chat.completions.create(

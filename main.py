@@ -26,6 +26,7 @@ import psutil
 from llm_refiner import refine_extraction_with_llm
 from template_generator import generate_cv_from_template
 from docx_to_template_converter import convert_docx_to_template
+from template_qa import validate_template_with_llm
 
 # Get a logger for the current module
 logger = logging.getLogger(__name__)
@@ -323,7 +324,22 @@ async def convert_cv_to_template(file: UploadFile = File(...)):
         logger.info("Starting template conversion process...")
         # By default, use the LLM-powered pipeline
         template_stream = convert_docx_to_template(docx_stream, nlp, use_llm=True)
-        logger.info("Template conversion process finished.")
+
+        # Stage 3: LLM QA Review
+        validation_result = validate_template_with_llm(template_stream)
+
+        if not validation_result.get("is_valid"):
+            logger.error(f"LLM QA validation failed. Issues: {validation_result.get('issues')}")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "The generated template failed quality assurance.",
+                    "issues": validation_result.get("issues", [])
+                }
+            )
+
+        logger.info("Template conversion and validation process finished successfully.")
+        template_stream.seek(0) # Reset stream after validation read
 
         # Create a new filename for the template
         original_filename = file.filename
