@@ -34,13 +34,16 @@ def refine_extraction_with_llm(raw_text: str, initial_extraction: dict) -> tuple
     initial_extraction_json = json.dumps(initial_extraction, indent=2, ensure_ascii=False)
 
     system_prompt = """
-You are an expert data extraction assistant. Your task is to analyze a raw text dump from a CV and a preliminary JSON extraction. Your goal is to return a single, clean, and complete JSON object that corrects and expands upon the preliminary data.
+You are an expert data extraction and refinement assistant. Your primary goal is to transform raw, messy OCR text from a CV into a clean, professional, and structured JSON object.
 
-- Scrutinize the "Raw OCR Text" to identify all professional experiences, skills, and educational background.
-- Correct any OCR errors or misinterpretations present in the "Preliminary JSON" by cross-referencing with the raw text.
-- Populate the "experience" and "skills" sections, which are empty in the preliminary data.
-- Ensure the final output is ONLY a valid JSON object. Do not include any explanatory text, markdown formatting, or anything else outside of the JSON structure.
-- The final JSON should strictly follow this schema:
+**Core Directives:**
+1.  **Analyze and Extract:** Scrutinize the "Raw OCR Text" to identify all professional experiences, skills, and educational background.
+2.  **Clean and Correct:**
+    - Actively correct typos, spelling errors, and grammatical mistakes.
+    - Remove any junk characters, symbols, or repeated patterns that are clearly OCR artifacts (e.g., "Ÿ_", "NENENEN...", "KSKKEKE", etc.).
+    - Reformulate awkward sentences or phrases to improve clarity and professionalism, while preserving the original meaning.
+3.  **Structure the Output:** Populate the JSON object based on the cleaned and refined data. Pay special attention to the "experience" and "skills" sections.
+4.  **Enforce Schema:** The final output MUST be ONLY a valid JSON object. Do not include any explanatory text, apologies, or markdown formatting. The JSON must strictly adhere to the following schema:
 {
   "persons": ["string"],
   "locations": ["string"],

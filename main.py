@@ -161,7 +161,8 @@ async def upload_cv(file: UploadFile = File(...)):
         doc = nlp(text)
         persons = list(set([ent.text for ent in doc.ents if ent.label_ == "PER"]))
         locations = list(set([ent.text for ent in doc.ents if ent.label_ == "LOC"]))
-        emails = list(set(re.findall(r'[\w\.-]+@[\w\.-]+', text)))
+        # Improved regex for emails: handles more complex names and common TLDs.
+        emails = list(set(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)))
         phones = list(set(re.findall(r'(\d{2}[-\.\s]?){4}\d{2}', text)))
         initial_extraction = {"persons": persons, "locations": locations, "emails": emails, "phones": phones, "skills": [], "experience": []}
         logger.info("Initial data extraction completed.")
