@@ -41,7 +41,7 @@
             justify-content: center;
             transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
         }
-        .file-upload-wrapper:hover {
+        .file-upload-wrapper.dragover {
             background-color: #ecf0f1;
             border-color: #2980b9;
         }
@@ -102,10 +102,10 @@
             (names, emails, locations) and replace it with Jinja2 placeholders like <code>{{ name }}</code>.
             The converted file will be downloaded automatically.
         </p>
-        <form action="/convert-to-template" method="post" enctype="multipart/form-data">
-            <div class="file-upload-wrapper">
-                <input type="file" name="file" id="file" accept=".docx" required>
-                <label for="file" class="file-upload-label">
+        <form action="/convert-to-template" method="post" enctype="multipart/form-data" id="upload-form">
+            <div class="file-upload-wrapper" id="drop-zone">
+                <input type="file" name="file" id="file-input" accept=".docx" required>
+                <label for="file-input" class="file-upload-label" id="file-label">
                     <strong>Click to select a file</strong>
                     <span>or drag and drop it here</span>
                 </label>
@@ -113,5 +113,59 @@
             <button type="submit">Convert and Download</button>
         </form>
     </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const fileLabel = document.getElementById('file-label');
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Highlight drop zone when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        // Handle dropped files
+        dropZone.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+
+        // Handle file selection via click
+        fileInput.addEventListener('change', function() {
+            handleFiles(this.files);
+        });
+
+        function handleFiles(files) {
+            if (files.length > 0) {
+                // We only handle the first file
+                const file = files[0];
+                if (file.name.endsWith('.docx')) {
+                    fileInput.files = files; // Assign the file to the input
+                    fileLabel.innerHTML = `<strong>Selected file:</strong><span>${file.name}</span>`;
+                } else {
+                    fileLabel.innerHTML = `<strong>Invalid file type.</strong><span>Please select a .docx file.</span>`;
+                    fileInput.value = ''; // Clear the input
+                }
+            }
+        }
+    </script>
 </body>
 </html>
