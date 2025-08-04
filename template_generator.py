@@ -1,4 +1,5 @@
 import io
+import zipfile
 from docxtpl import DocxTemplate
 
 TEMPLATE_PATH = "templates/cv_template.docx"
@@ -14,10 +15,41 @@ def generate_cv_from_template(data: dict) -> io.BytesIO:
         A BytesIO stream of the generated .docx file.
     """
     try:
-        doc = DocxTemplate(TEMPLATE_PATH)
+        # --- In-memory template patching using zipfile ---
+        # The template has a syntax error. This logic corrects it in memory by
+        # rebuilding the .docx file without the erroneous paragraph.
+
+        bad_paragraph = (
+            '<w:p w14:paraId="1FAF1A35" w14:textId="77777777" w:rsidR="0094773F" '
+            'w:rsidRDefault="0094773F" w:rsidP="0094773F"><w:pPr><w:ind w:left="360"/>'
+            '<w:rPr><w:lang w:val="fr-FR" w:eastAsia="en-GB"/></w:rPr></w:pPr><w:r>'
+            '<w:t>{% endfor %}</w:t></w:r></w:p>'
+        )
+
+        fixed_template_stream = io.BytesIO()
+        with zipfile.ZipFile(TEMPLATE_PATH, 'r') as original_zip:
+            with zipfile.ZipFile(fixed_template_stream, 'w', zipfile.ZIP_DEFLATED) as fixed_zip:
+                for item in original_zip.infolist():
+                    if item.filename == 'word/document.xml':
+                        xml_content = original_zip.read(item.filename).decode('utf-8')
+                        # Only patch if the bad paragraph exists
+                        if bad_paragraph in xml_content:
+                            fixed_xml_content = xml_content.replace(bad_paragraph, '')
+                            fixed_zip.writestr(item.filename, fixed_xml_content.encode('utf-8'))
+                        else:
+                            fixed_zip.writestr(item.filename, original_zip.read(item.filename))
+                    else:
+                        fixed_zip.writestr(item.filename, original_zip.read(item.filename))
+
+        fixed_template_stream.seek(0)
+        doc = DocxTemplate(fixed_template_stream)
+
     except Exception as e:
-        # This will happen if the create_template.py script hasn't been run successfully.
-        raise FileNotFoundError(f"Template not found at '{TEMPLATE_PATH}'. Please run the `create_template.py` script first.") from e
+        # If patching fails, fall back to the original template
+        # to get the original error, which is better than a new one.
+        import logging
+        logging.warning(f"Template patching failed: {e}. Falling back to original template.")
+        doc = DocxTemplate(TEMPLATE_PATH)
 
     # Prepare the context for Jinja2 rendering
     # The 'data' object from the DB is nested, so we extract the entities
@@ -38,6 +70,7 @@ def generate_cv_from_template(data: dict) -> io.BytesIO:
     # docxtpl can handle loops, so we pass the lists directly
     context['experiences'] = context.get('experience', [])
     context['skills'] = context.get('skills', [])
+
 
     # Render the document
     try:
