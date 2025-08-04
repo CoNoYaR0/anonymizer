@@ -121,6 +121,8 @@ This tool allows you to upload a completed `.docx` CV and get back a version wit
 4.  Click the **"Convert and Download"** button.
 5.  Your browser will automatically download the converted template file, which will be named something like `YourCV_template.docx`.
 
+**Note:** The conversion process includes a final validation step to ensure the generated template is free of errors. If the system detects that it cannot safely create a template from your document, it will return an error message explaining the issue.
+
 ### 2. CV Anonymization API
 
 You can interact with the API using tools like `curl`, Postman, or the interactive documentation.

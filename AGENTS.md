@@ -8,25 +8,44 @@ The primary goal of this project is to create a FastAPI backend that accepts a C
 
 ## 2. System Architecture & Data Flow
 
-The application follows a sequential pipeline model. Here is the typical flow for a `/upload` request:
+The application has two primary workflows.
 
-1.  **HTTP Request (`/upload`)**: `main.py` receives a `multipart/form-data` request containing a PDF file.
-2.  **Deduplication**: The SHA256 hash of the PDF content is calculated. The `extractions` database table is queried to check if this `file_hash` already exists.
-    -   **If YES**: The existing `extraction_id` is returned immediately. The pipeline stops.
-    -   **If NO**: The pipeline continues.
-3.  **OCR Processing**: The raw PDF bytes are converted to plain text using `pytesseract` and the `pdf2image` library. This happens in `main.py`.
-4.  **Initial NER Extraction**: The raw text is processed by a `spaCy` model (`fr_core_news_lg`) to perform Named Entity Recognition (NER). Basic contact info (emails, phones) is extracted using regex. This provides a baseline `initial_extraction` JSON object.
-5.  **LLM Refinement**:
-    -   **Module**: `llm_refiner.py`
-    -   **Function**: `refine_extraction_with_llm()`
-    -   **Input**: `raw_text` (string) and `initial_extraction` (dict).
-    -   **Process**: The raw text and initial JSON are formatted into a prompt. This prompt is sent to a Hugging Face Inference API endpoint.
-    -   **Current Model**: `facebook/bart-large-cnn` (a summarization model used as a stable placeholder).
-    -   **Output**: A tuple `(bool, dict)` indicating success and the refined JSON data.
-6.  **Data Persistence**:
-    -   The original PDF is uploaded to a Supabase Storage bucket (`cvs`).
-    -   A new record is inserted into the `extractions` table in the Supabase database. This record contains the `file_hash`, storage path, and the final refined JSON data.
-7.  **HTTP Response**: The `extraction_id` of the newly created record is returned to the user.
+### Workflow 1: PDF Anonymization (`/upload` & `/anonymize`)
+This flow is designed to extract structured data from a PDF CV and use it to populate a fixed template.
+1.  **HTTP Request (`/upload`)**: Receives a PDF file.
+2.  **Deduplication & OCR**: Converts the PDF to raw text.
+3.  **LLM Refinement (`llm_refiner.py`)**: Uses GPT-4o to extract structured `JSON` data from the raw text.
+4.  **Data Persistence**: Saves the extracted JSON to the database, returning an `extraction_id`.
+5.  **Anonymization (`/anonymize/{id}`)**: The user calls this endpoint with the ID. The system uses `template_generator.py` to inject the stored JSON into a predefined `.docx` template (`templates/cv_template.docx`) and returns a download link.
+
+### Workflow 2: DOCX to Template Conversion (`/convert-to-template`)
+This is a more advanced, self-contained pipeline designed to convert any given `.docx` CV into a reusable Jinja2 template. It follows a 3-stage, LLM-driven process to ensure quality and correctness.
+
+-   **Endpoint**: `POST /convert-to-template`
+-   **Input**: A single `.docx` file.
+-   **Output**: A ready-to-use `.docx` Jinja2 template file, or a JSON error object if validation fails.
+
+#### The 3-Stage Pipeline:
+
+1.  **Stage 1: LLM Semantic Analysis (`docx_to_template_converter.py`)**
+    -   The text content of the uploaded `.docx` is extracted.
+    -   This text is sent to an LLM (GPT-4o) with a detailed system prompt.
+    -   The prompt instructs the LLM to act as an expert template engineer, identifying all dynamic content (names, experiences, skills, etc.) and defining how it should be templated.
+    -   The LLM returns a structured JSON "semantic map" containing two types of instructions:
+        -   `simple_replacements`: For basic text-to-placeholder swaps (e.g., `"John Doe"` -> `"{{ name }}"`).
+        -   `block_replacements`: For complex, multi-paragraph sections, where the LLM provides the full Jinja2 loop code (e.g., `{% for job in experiences %}{{ job.title }}{% endfor %}`).
+
+2.  **Stage 2: Template Generation (`docx_to_template_converter.py`)**
+    -   This stage takes the original `.docx` file and the semantic map from Stage 1.
+    -   It uses a robust, paragraph-aware replacement engine to apply the instructions from the map.
+    -   It iterates through all paragraphs (including those in tables) to perform both simple and block-level replacements.
+    -   The output is a new in-memory `.docx` file containing the Jinja2 template code.
+
+3.  **Stage 3: LLM QA Review (`template_qa.py`)**
+    -   The newly generated template from Stage 2 is passed to a second, specialized LLM call for validation.
+    -   This QA LLM is given a strict set of rules (correct Jinja2 syntax, placeholder naming conventions, no unclosed loops, etc.).
+    -   It returns a JSON object indicating if the template is `is_valid` and a list of `issues` if any are found.
+    -   **Decision:** If the template is valid, it's sent to the user. If not, the pipeline stops, and a `400 Bad Request` is returned to the user, including the list of issues identified by the QA LLM for full transparency.
 
 ## 3. Key Modules & Components
 
@@ -112,23 +131,23 @@ When creating or modifying the `.docx` template (`templates/cv_template.docx`), 
 ---
 
 ### `docx_to_template_converter.py`
-- **Responsibility**: Provides the core logic for converting a `.docx` file into a Jinja2 template.
-- **Key Function**: `convert_docx_to_template(docx_stream, nlp_model)`
-- **Algorithm**:
-    1.  Reads the text content from an uploaded `.docx` file.
-    2.  Uses the `spaCy` model and regex to identify entities (names, emails, locations, etc.).
-    3.  Implements robust logic to handle common NER model inaccuracies, such as filtering false positives and deterministically assigning the main `{{ name }}` placeholder.
-    4.  Iterates through the document's paragraphs and tables to replace the found entities with their corresponding Jinja2 placeholders (e.g., "Jean Dupont" -> `{{ name }}`).
-    5.  Saves the modified document to a memory stream.
-- **Note**: The text replacement logic is designed to work on a run-by-run basis within `python-docx` but has known limitations where entities are split across runs with different formatting.
+- **Responsibility**: Implements Stage 1 (Analysis) and Stage 2 (Generation) of the DOCX to Template pipeline.
+- **Key Function**: `convert_docx_to_template(docx_stream, ...)`
+- **Key Algorithm (`_replace_text_block`)**: Contains the robust logic for finding and replacing multi-paragraph blocks of text, searching within the main body and all table cells.
+
+### `template_qa.py`
+- **Responsibility**: Implements Stage 3 (QA Review) of the DOCX to Template pipeline.
+- **Key Function**: `validate_template_with_llm(docx_stream)`
+- **Functionality**: Extracts text from the generated template and uses a specialized LLM prompt to check for Jinja2 syntax errors and adherence to the project's specific templating conventions.
 
 ### `tests/`
 - **Responsibility**: Contains the test suite for the application.
 - **Key File**: `tests/test_converter.py`
-- **Functionality**: Uses `pytest` and FastAPI's `TestClient` to perform integration testing on the API endpoints. It includes tests for the `/convert-to-template` endpoint, verifying success cases with a dynamically generated `.docx` file and failure cases for invalid inputs.
+- **Functionality**: Uses `pytest` and FastAPI's `TestClient` to perform integration testing.
+- **Mocking**: The tests for the template converter use `monkeypatch` to mock the LLM calls in Stage 1 and Stage 3, ensuring tests are fast, deterministic, and do not require API keys.
 
 ---
-*In `main.py`, the following endpoints have been added:*
+*In `main.py`, the following endpoints are relevant to the converter workflow:*
 
-- `/converter`: A `GET` endpoint that serves the `templates/converter.html` page, providing a simple UI for the template conversion feature.
-- `/convert-to-template`: A `POST` endpoint that accepts a `.docx` file. It uses the `docx_to_template_converter` module to process the file and returns the generated Jinja2 template as a downloadable file.
+- `/converter`: A `GET` endpoint that serves the `templates/converter.html` page.
+- `/convert-to-template`: A `POST` endpoint that orchestrates the full 3-stage pipeline for converting a `.docx` file into a Jinja2 template.
