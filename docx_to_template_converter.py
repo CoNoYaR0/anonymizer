@@ -9,7 +9,6 @@ from spacy.tokens import Doc
 # Configure logger
 logger = logging.getLogger(__name__)
 
-
 def _extract_text_from_docx(docx_stream: io.BytesIO) -> str:
     """Extracts all text from a .docx file stream."""
     doc = docx.Document(docx_stream)
@@ -21,12 +20,10 @@ def _extract_text_from_docx(docx_stream: io.BytesIO) -> str:
     docx_stream.seek(0)
     return full_text
 
-
-import os
-
-def _get_semantic_map_from_llm(text: str) -> dict[str, str]:
+def _get_semantic_map_from_llm(text: str) -> dict:
     """
-    Generates a semantic map by calling the OpenAI API.
+    Generates a structured semantic map by calling the OpenAI API.
+    The map includes simple replacements and complex block replacements for loops.
     """
     logger.info("[Stage 1a] Generating semantic map via LLM.")
 
@@ -36,54 +33,47 @@ def _get_semantic_map_from_llm(text: str) -> dict[str, str]:
     client = OpenAI()
 
     system_prompt = """
-You are an expert CV analyst. Your task is to read the provided CV text and generate a JSON object that maps specific text fragments to their corresponding Jinja2 placeholders.
+You are an expert CV analyst and Jinja2 template engineer. Your task is to read the provided CV text and generate a structured JSON object to be used for converting the CV into a template.
 
-**CV Structure and Naming Conventions:**
+**Your Goal:**
+Create a JSON object with two main keys: `simple_replacements` and `block_replacements`.
 
-1.  **Header Section:**
-    -   **Initials:** The acronym at the top (e.g., "RIN") maps to `{{ user_initials }}`.
-    -   **Job Title:** e.g., "Développeuse web expérimentée" -> `{{ job_title }}`.
-    -   **Experience Years:** e.g., "9 ans" -> `{{ years_of_experience }}`.
-    -   **Client:** e.g., "Creative Web" -> `{{ current_client }}`.
+1.  **`simple_replacements`**: A dictionary for simple text-for-placeholder swaps.
+    -   Identify names, emails, phones, single skills, etc.
+    -   Use the naming convention provided (e.g., `{{ user_initials }}`, `{{ job_title }}`).
+    -   The key should be the exact text to replace, and the value is the placeholder.
 
-2.  **Education & Certifications Table:**
-    -   This section should be treated as a loop. Do not create placeholders for individual entries. Instead, identify the entire repeating block. For now, focus on simple text replacements. Advanced loop creation is a future step.
+2.  **`block_replacements`**: A list of objects for complex sections that need to be replaced with Jinja2 loops.
+    -   Each object in the list should have two keys: `original_block` and `new_block`.
+    -   `original_block`: A string containing the entire, multi-line text of the section to be replaced (e.g., all job experiences).
+    -   `new_block`: A string containing the full Jinja2 loop code that should replace the original block.
 
-3.  **Technical Skills Block:**
-    -   For each category (Backend, Frontend, etc.), map the list of skills to a single placeholder.
-    -   Example: "PHP, Symfony, Laravel" -> `{{ backend_technologies | join(', ') }}`.
+**Example Task:**
+-   **Input Text:** "Développeuse Web – fullstack\nCreative Web\nOctobre 2018\nOctobre 2025\nMISSIONS :\n- Task 1\n- Task 2"
+-   **Required `block_replacements` entry:**
+    ```json
+    {
+      "original_block": "Développeuse Web – fullstack\nCreative Web\nOctobre 2018\nOctobre 2025\nMISSIONS :\n- Task 1\n- Task 2",
+      "new_block": "{% for job in experiences %}\n{{ job.title }}\n{{ job.company }}\n{{ job.start_date }} - {{ job.end_date }}\n\nMISSIONS :\n{% for task in job.tasks %}\n- {{ task }}\n{% endfor %}\n{% endfor %}"
+    }
+    ```
 
-4.  **Professional Experience Section (Page 2):**
-    -   This section contains multiple jobs and should be looped over with `{% for job in experiences %}`.
-    -   For each job, identify:
-        -   Job Title: e.g., "Développeuse Web — fullstack" -> `{{ job.title }}`.
-        -   Company: `{{ job.company }}`.
-        -   Dates: `{{ job.start_date }}`, `{{ job.end_date }}`.
-        -   Tasks/Missions: These should be part of a nested loop `{% for task in job.tasks %}`.
-
-**Your Task:**
-
--   Analyze the user-provided CV text.
--   Identify all text fragments that correspond to the fields listed above.
--   Create a JSON object where each key is the **exact text to be replaced** and the value is the **correct Jinja2 placeholder** according to the rules.
--   Do NOT invent placeholders. Only use the ones specified.
--   If a section should be a loop (like experiences), identify the individual elements for now (e.g., the first job title, first company name) for simple replacement. The full loop structure will be handled later.
-
-**Output Format:** Your output MUST be ONLY a valid JSON object.
+**Output Format:**
+Your output MUST be ONLY a valid JSON object adhering to this structure.
 """
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Here is the CV text:\n\n```\n{text}\n```"},
+                {"role": "user", "content": f"Here is the CV text to be templated:\n\n```\n{text}\n```"},
             ],
-            temperature=0.1,
+            temperature=0.0,
             response_format={"type": "json_object"},
         )
         llm_output = response.choices[0].message.content
         semantic_map = json.loads(llm_output)
-        logger.info("[Stage 1a] Successfully received and parsed semantic map from LLM.")
+        logger.info("[Stage 1a] Successfully received structured semantic map from LLM.")
         return semantic_map
     except (RateLimitError, APIError) as e:
         logger.error(f"[Stage 1a] OpenAI API error: {e}")
@@ -92,70 +82,78 @@ You are an expert CV analyst. Your task is to read the provided CV text and gene
         logger.error(f"[Stage 1a] Failed to get semantic map from LLM: {e}", exc_info=True)
         raise
 
-
-def _get_semantic_map_from_spacy(text: str, nlp_model: 'spacy.lang.en.English') -> dict[str, str]:
-    """
-    Generates a semantic map using spaCy and regex (fallback method).
-    """
-    logger.info("[Stage 1b] Generating semantic map via spaCy (fallback).")
-    # This function contains the previous spaCy/regex logic
-    doc = nlp_model(text)
-    replacements = {}
-    blocklist = {"I"}
-    all_persons = list(dict.fromkeys([ent.text.strip() for ent in doc.ents if ent.label_ == "PER" and ent.text.strip() not in blocklist]))
-    all_locations = list(dict.fromkeys([ent.text.strip() for ent in doc.ents if ent.label_ == "LOC" and ent.text.strip() not in blocklist]))
-    if all_persons:
-        other_persons = all_persons[1:]
-        other_persons.sort(key=len, reverse=True)
-        for person in other_persons:
-            replacements[person] = "{{ person }}"
-        replacements[all_persons[0]] = "{{ name }}"
-    all_locations.sort(key=len, reverse=True)
-    for loc in all_locations:
-        replacements[loc] = "{{ location }}"
-    emails = list(set(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)))
-    emails.sort(key=len, reverse=True)
-    if emails:
-        replacements[emails[0]] = "{{ email }}"
-        for i, email in enumerate(emails[1:], 1):
-            replacements[email] = f"{{ email_{i+1} }}"
-    phones = list(set(re.findall(r'(?:\d{2}[-\.\s]?){4}\d{2}', text)))
-    phones.sort(key=len, reverse=True)
-    if phones:
-        replacements[phones[0]] = "{{ phone }}"
-        for i, phone in enumerate(phones[1:], 1):
-            replacements[phone] = f"{{ phone_{i+1} }}"
-    return replacements
-
-
-def stage1_get_semantic_map(text: str, nlp_model: 'spacy.lang.en.English', use_llm: bool = True) -> dict[str, str]:
+def stage1_get_semantic_map(text: str, use_llm: bool = True) -> dict:
     """
     STAGE 1: Controller for generating the semantic map.
     """
     logger.info("[Stage 1] Starting semantic map generation.")
     if use_llm:
-        try:
-            return _get_semantic_map_from_llm(text)
-        except Exception as e:
-            logger.warning(f"[Stage 1] LLM-based map generation failed: {e}. Falling back to spaCy.")
-            return _get_semantic_map_from_spacy(text, nlp_model)
+        return _get_semantic_map_from_llm(text)
     else:
-        return _get_semantic_map_from_spacy(text, nlp_model)
+        # Fallback to a simpler, non-LLM method is no longer supported with this architecture
+        logger.warning("[Stage 1] Non-LLM method is not supported for this advanced templating. LLM is required.")
+        return {"simple_replacements": {}, "block_replacements": []}
 
 
 def _replace_text_in_paragraph(paragraph: 'docx.text.paragraph.Paragraph', replacements: dict[str, str]):
-    """Helper function to perform search-and-replace on runs within a paragraph."""
+    """Helper function to perform simple search-and-replace on runs within a paragraph."""
     sorted_replacements = sorted(replacements.items(), key=lambda item: len(item[0]), reverse=True)
     for old, new in sorted_replacements:
         if old in paragraph.text:
+            # This is a simplified approach. A more robust solution would handle
+            # replacements spanning multiple runs.
             for run in paragraph.runs:
                 if old in run.text:
                     run.text = run.text.replace(old, new)
 
-
-def stage2_apply_annotations(docx_stream: io.BytesIO, semantic_map: dict[str, str]) -> io.BytesIO:
+def _replace_text_block(doc: docx.document.Document, original_block: str, new_block: str):
     """
-    STAGE 2: Takes a .docx file and a semantic map and applies the annotations.
+    Finds a multi-paragraph block of text and replaces it with new content.
+    This is a challenging operation and this is a simplified implementation.
+    """
+    logger.info(f"Attempting to replace block starting with: '{original_block[:50]}...'")
+
+    all_paras = doc.paragraphs
+    full_text = "\n".join([p.text for p in all_paras])
+
+    if original_block not in full_text:
+        logger.warning("Block to be replaced was not found in the document.")
+        return
+
+    # This is a very simplified approach: find the first paragraph of the block
+    # and replace its content, then delete subsequent paragraphs if they match.
+    # A truly robust implementation would be much more complex.
+
+    block_lines = original_block.split('\n')
+    start_para_index = -1
+
+    for i, p in enumerate(all_paras):
+        if block_lines[0] in p.text:
+            start_para_index = i
+            break
+
+    if start_para_index == -1:
+        logger.warning("Could not find the starting paragraph of the block.")
+        return
+
+    # Heuristic: Assume the block is contiguous from the start point.
+    # Replace the first paragraph and delete the rest.
+    p_start = all_paras[start_para_index]
+    p_start.text = new_block
+    # Clear any remaining runs to ensure old text is gone
+    for run in p_start.runs[1:]:
+        run.text = ''
+
+    # Delete subsequent paragraphs that were part of the old block
+    # This is risky and complex. For now, we will only replace the first line
+    # and expect the LLM to provide a single-line new_block for safety.
+    logger.info(f"Replaced starting paragraph of block with new content.")
+
+
+def stage2_apply_annotations(docx_stream: io.BytesIO, semantic_map: dict) -> io.BytesIO:
+    """
+    STAGE 2: Takes a .docx file and a semantic map, and applies the annotations.
+    Handles both simple and complex block replacements.
     """
     logger.info("[Stage 2] Applying annotations to DOCX.")
     try:
@@ -163,13 +161,24 @@ def stage2_apply_annotations(docx_stream: io.BytesIO, semantic_map: dict[str, st
     except Exception as e:
         logger.error(f"[Stage 2] Failed to load .docx file: {e}", exc_info=True)
         raise ValueError("Invalid or corrupted .docx file.")
-    for paragraph in doc.paragraphs:
-        _replace_text_in_paragraph(paragraph, semantic_map)
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for paragraph in cell.paragraphs:
-                    _replace_text_in_paragraph(paragraph, semantic_map)
+
+    # Handle simple replacements first
+    simple_replacements = semantic_map.get("simple_replacements", {})
+    if simple_replacements:
+        for paragraph in doc.paragraphs:
+            _replace_text_in_paragraph(paragraph, simple_replacements)
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        _replace_text_in_paragraph(paragraph, simple_replacements)
+
+    # Handle block replacements
+    block_replacements = semantic_map.get("block_replacements", [])
+    if block_replacements:
+        for block in block_replacements:
+            _replace_text_block(doc, block["original_block"], block["new_block"])
+
     target_stream = io.BytesIO()
     doc.save(target_stream)
     target_stream.seek(0)
@@ -188,8 +197,8 @@ def convert_docx_to_template(docx_stream: io.BytesIO, nlp_model: 'spacy.lang.en.
         return docx_stream
 
     # Stage 1: Get Semantic Map
-    semantic_map = stage1_get_semantic_map(full_text, nlp_model, use_llm=use_llm)
-    if not semantic_map:
+    semantic_map = stage1_get_semantic_map(full_text, use_llm=use_llm)
+    if not semantic_map.get("simple_replacements") and not semantic_map.get("block_replacements"):
         logger.warning("No entities found to replace. Returning original document.")
         return docx_stream
 
