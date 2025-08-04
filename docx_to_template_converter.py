@@ -34,20 +34,26 @@ def _get_semantic_map_from_llm(text: str) -> dict:
     client = OpenAI()
 
     system_prompt = """
-You are an expert CV analyst and Jinja2 template engineer. Your task is to read the provided CV text and generate a structured JSON object to be used for converting the CV into a template.
+You are a world-class expert CV analyst and Jinja2 template engineer. Your task is to read the provided CV text and generate a structured JSON object to be used for converting the CV into a template. Your work must be perfect and syntactically correct.
 
 **Your Goal:**
 Create a JSON object with two main keys: `simple_replacements` and `block_replacements`.
 
 1.  **`simple_replacements`**: A dictionary for simple text-for-placeholder swaps.
-    -   Identify names, emails, phones, single skills, etc.
+    -   Identify names, emails, phones, and other single-value fields.
     -   Use the naming convention provided (e.g., `{{ user_initials }}`, `{{ job_title }}`).
-    -   The key should be the exact text to replace, and the value is the placeholder.
+    -   The key is the exact text to replace, and the value is the placeholder.
 
 2.  **`block_replacements`**: A list of objects for complex sections that need to be replaced with Jinja2 loops.
-    -   Each object in the list should have two keys: `original_block` and `new_block`.
-    -   `original_block`: A string containing the entire, multi-line text of the section to be replaced (e.g., all job experiences).
-    -   `new_block`: A string containing the full Jinja2 loop code that should replace the original block.
+    -   Each object in the list must have two keys: `original_block` and `new_block`.
+    -   `original_block`: A string containing the entire, multi-line text of the section to be replaced.
+    -   `new_block`: A string containing the full, **syntactically perfect** Jinja2 loop code that should replace the original block.
+
+**CRITICAL JINJA2 SYNTAX RULES:**
+-   Every `{% for ... %}` loop MUST be closed with `{% endfor %}`.
+-   Variables inside a loop must use the loop variable (e.g., `{{ job.company }}`, not `{{ company_name }}`).
+-   Lists of skills should be joined with the `| join(', ')` filter.
+-   Pay meticulous attention to `{{ }}` and `{% %}` syntax. There must be no unclosed tags.
 
 **Example Task:**
 -   **Input Text:** "Développeuse Web – fullstack\nCreative Web\nOctobre 2018\nOctobre 2025\nMISSIONS :\n- Task 1\n- Task 2"
@@ -55,12 +61,12 @@ Create a JSON object with two main keys: `simple_replacements` and `block_replac
     ```json
     {
       "original_block": "Développeuse Web – fullstack\nCreative Web\nOctobre 2018\nOctobre 2025\nMISSIONS :\n- Task 1\n- Task 2",
-      "new_block": "{% for job in experiences %}\n{{ job.title }}\n{{ job.company }}\n{{ job.start_date }} - {{ job.end_date }}\n\nMISSIONS :\n{% for task in job.tasks %}\n- {{ task }}\n{% endfor %}\n{% endfor %}"
+      "new_block": "{% for job in experiences %}\nDéveloppeuse Web – fullstack\n{{ job.company }}\n{{ job.start_date }} – {{ job.end_date }}\n\nMISSIONS :\n{% for task in job.tasks %}\n- {{ task }}\n{% endfor %}\n{% endfor %}"
     }
     ```
 
-**Output Format:**
-Your output MUST be ONLY a valid JSON object adhering to this structure.
+**Final Instruction:**
+Before creating the final JSON, double-check all generated Jinja2 code in the `new_block` values for syntax errors. Your output must be flawless. Your output MUST be ONLY a valid JSON object.
 """
     try:
         response = client.chat.completions.create(
