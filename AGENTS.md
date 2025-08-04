@@ -76,3 +76,12 @@ The application is configured via a `.env` file in the root directory.
 - `SUPABASE_ANON_KEY`: The public "anon" key for your Supabase project.
 - `OPENAI_API_KEY`: Your API key from OpenAI, used for the GPT-4o refinement process.
 - `DEBUG`: Set to `"True"` to enable debug-level logging and more verbose error responses.
+
+## 5. Template Debugging
+
+When creating or modifying the `.docx` template (`templates/cv_template.docx`), it's possible to introduce Jinja2 syntax errors.
+
+- **Trigger**: A `jinja2.exceptions.TemplateSyntaxError` will be raised during a call to the `/anonymize/{id}` endpoint.
+- **Debugging Feature**: If the application is running with `DEBUG=True` in the environment, the `template_generator.py` module will catch this specific error.
+- **Action**: It will save the raw, pre-rendered XML of the document body to a file named `templates/debug_template.xml`.
+- **How to Use**: Open `debug_template.xml` in a text editor. The content is the raw `document.xml` from the `.docx` file. You can search this file for the malformed Jinja2 tags (e.g., `{{ an_incorrect_variable }}`) to find the exact location of the error, which is often difficult to do by looking at the `.docx` file directly.

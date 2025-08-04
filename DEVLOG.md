@@ -72,3 +72,7 @@ As of now, we have successfully completed the core backend functionality as outl
     *   **Deployment:** Re-evaluate the deployment strategy for Render. This will likely involve creating a `build.sh` script to install Tesseract and Poppler in the build environment, or choosing a higher-tier plan with more memory.
     *   **CI/CD:** Set up a continuous integration and deployment pipeline (e.g., using GitHub Actions) to automate testing and deployments.
     *   **Security & Compliance:** Implement logging, data retention policies (e.g., auto-deleting CVs after 30 days), and other security measures to ensure GDPR compliance.
+
+### Debugging & Reliability
+
+*   **Template Debugging:** Implemented a crucial debugging feature for template creation. If the application is run in `DEBUG` mode (`DEBUG=True`) and a `TemplateSyntaxError` occurs during document generation, the system will automatically save the raw, pre-rendering XML of the template to `templates/debug_template.xml`. This allows developers to pinpoint the exact location of Jinja2 syntax errors within the `.docx` file's underlying XML structure, greatly simplifying the template debugging process.
