@@ -3,6 +3,7 @@ import io
 import re
 import logging
 import json
+import os
 from openai import OpenAI, RateLimitError, APIError
 from spacy.tokens import Doc
 
