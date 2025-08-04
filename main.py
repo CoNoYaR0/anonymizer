@@ -12,6 +12,7 @@ import re
 import uuid
 import hashlib
 from fastapi import FastAPI, File, UploadFile, HTTPException, Body
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 import pytesseract
 from pdf2image import convert_from_bytes
@@ -24,6 +25,7 @@ from docx.shared import Inches
 import psutil
 from llm_refiner import refine_extraction_with_llm
 from template_generator import generate_cv_from_template
+from docx_to_template_converter import convert_docx_to_template
 
 # Get a logger for the current module
 logger = logging.getLogger(__name__)
@@ -85,6 +87,11 @@ else:
 def read_root():
     """Root endpoint to check if the API is running."""
     return {"message": "Welcome to the CV Anonymizer API!"}
+
+@app.get("/converter", response_class=FileResponse)
+async def read_converter_page():
+    """Serves the HTML page for the DOCX to Template converter."""
+    return "templates/converter.html"
 
 @app.get("/status")
 def get_status():
@@ -294,3 +301,47 @@ async def anonymize_cv_by_id(extraction_id: int):
     except Exception as e:
         logger.critical(f"An unexpected error occurred during anonymization for ID {extraction_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred during anonymization.")
+
+
+@app.post("/convert-to-template")
+async def convert_cv_to_template(file: UploadFile = File(...)):
+    """
+    Uploads a .docx CV, replaces personal data with Jinja2 placeholders,
+    and returns the resulting file as a downloadable template.
+    """
+    logger.info(f"Received file '{file.filename}' for template conversion.")
+    if file.content_type != "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        logger.warning(f"Invalid file type '{file.content_type}' received.")
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a .docx file.")
+
+    try:
+        docx_bytes = await file.read()
+        docx_stream = io.BytesIO(docx_bytes)
+
+        # The nlp model is already loaded globally
+        logger.info("Starting template conversion process...")
+        template_stream = convert_docx_to_template(docx_stream, nlp)
+        logger.info("Template conversion process finished.")
+
+        # Create a new filename for the template
+        original_filename = file.filename
+        template_filename = original_filename.replace('.docx', '_template.docx')
+
+        # Set headers for file download
+        headers = {
+            'Content-Disposition': f'attachment; filename="{template_filename}"'
+        }
+
+        return StreamingResponse(
+            template_stream,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers=headers
+        )
+
+    except ValueError as ve:
+        # Handle specific errors raised from the converter, like corrupted files
+        logger.error(f"Value error during template conversion: {ve}", exc_info=True)
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.critical(f"An unexpected error occurred during template conversion for '{file.filename}': {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred during template conversion.")
