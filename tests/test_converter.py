@@ -51,10 +51,14 @@ def test_convert_to_template_endpoint_success(sample_docx_stream: io.BytesIO, mo
     def mock_get_map_from_llm(text: str):
         return mock_semantic_map
 
-    # 2. Apply the mock to the function in the converter module
+    # 2. Apply the mock to the Stage 1 and Stage 3 functions
     monkeypatch.setattr(
         "docx_to_template_converter._get_semantic_map_from_llm",
         mock_get_map_from_llm
+    )
+    monkeypatch.setattr(
+        "main.validate_template_with_llm",
+        lambda docx_stream: {"is_valid": True, "issues": []}
     )
 
     # 3. Run the test with the mock in place
