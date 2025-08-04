@@ -108,3 +108,27 @@ When creating or modifying the `.docx` template (`templates/cv_template.docx`), 
 - **Debugging Feature**: If the application is running with `DEBUG=True` in the environment, the `template_generator.py` module will catch this specific error.
 - **Action**: It will save the raw, pre-rendered XML of the document body to a file named `templates/debug_template.xml`.
 - **How to Use**: Open `debug_template.xml` in a text editor. The content is the raw `document.xml` from the `.docx` file. You can search this file for the malformed Jinja2 tags (e.g., `{{ an_incorrect_variable }}`) to find the exact location of the error, which is often difficult to do by looking at the `.docx` file directly.
+
+---
+
+### `docx_to_template_converter.py`
+- **Responsibility**: Provides the core logic for converting a `.docx` file into a Jinja2 template.
+- **Key Function**: `convert_docx_to_template(docx_stream, nlp_model)`
+- **Algorithm**:
+    1.  Reads the text content from an uploaded `.docx` file.
+    2.  Uses the `spaCy` model and regex to identify entities (names, emails, locations, etc.).
+    3.  Implements robust logic to handle common NER model inaccuracies, such as filtering false positives and deterministically assigning the main `{{ name }}` placeholder.
+    4.  Iterates through the document's paragraphs and tables to replace the found entities with their corresponding Jinja2 placeholders (e.g., "Jean Dupont" -> `{{ name }}`).
+    5.  Saves the modified document to a memory stream.
+- **Note**: The text replacement logic is designed to work on a run-by-run basis within `python-docx` but has known limitations where entities are split across runs with different formatting.
+
+### `tests/`
+- **Responsibility**: Contains the test suite for the application.
+- **Key File**: `tests/test_converter.py`
+- **Functionality**: Uses `pytest` and FastAPI's `TestClient` to perform integration testing on the API endpoints. It includes tests for the `/convert-to-template` endpoint, verifying success cases with a dynamically generated `.docx` file and failure cases for invalid inputs.
+
+---
+*In `main.py`, the following endpoints have been added:*
+
+- `/converter`: A `GET` endpoint that serves the `templates/converter.html` page, providing a simple UI for the template conversion feature.
+- `/convert-to-template`: A `POST` endpoint that accepts a `.docx` file. It uses the `docx_to_template_converter` module to process the file and returns the generated Jinja2 template as a downloadable file.
