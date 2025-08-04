@@ -55,15 +55,13 @@ Create a file named `.env` in the root of the project directory and add the foll
 ```
 SUPABASE_URL="YOUR_SUPABASE_URL"
 SUPABASE_ANON_KEY="YOUR_SUPABASE_ANON_KEY"
-HUGGINGFACE_API_KEY="YOUR_HUGGINGFACE_API_KEY"
+OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 DEBUG="False"
 ```
 
 *   **`SUPABASE_URL` / `SUPABASE_ANON_KEY`**: Your project's Supabase credentials.
-*   **`HUGGINGFACE_API_KEY`**: Your API key from Hugging Face. This is used for the LLM refinement step, which currently uses the `facebook/bart-large-cnn` model as a stable placeholder.
+*   **`OPENAI_API_KEY`**: Your API key from [platform.openai.com](https://platform.openai.com/). This is now required for the data refinement step, which uses the `gpt-4o` model.
 *   **`DEBUG`**: Set to `"True"` to enable detailed debug logging and to receive detailed error messages in API responses. Defaults to `"False"`.
-
-**Note on LLM:** The current default model is a temporary, stable solution. The production target is to use a more powerful model like GPT-4o, which will require different configuration in the future.
 
 **Note:** If you run the application without this file, the Supabase integration will be disabled. The API will still work, but no files will be saved.
 
