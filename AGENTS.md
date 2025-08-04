@@ -77,7 +77,30 @@ The application is configured via a `.env` file in the root directory.
 - `OPENAI_API_KEY`: Your API key from OpenAI, used for the GPT-4o refinement process.
 - `DEBUG`: Set to `"True"` to enable debug-level logging and more verbose error responses.
 
-## 5. Template Debugging
+## 5. Template Context
+
+The `template_generator.py` module prepares a context dictionary that is passed to the `cv_template.docx` for rendering. Here are the available variables:
+
+- `initials` (str): The initials of the person's name.
+- `title` (str): The person's title (e.g., "Software Engineer").
+- `experience_years` (int): The total years of experience, calculated from the `period` of each experience.
+- `current_company` (str): The company of the most recent experience.
+- `experiences` (list of dicts): A list of work experiences. Each dictionary has the following keys:
+    - `title` (str)
+    - `company` (str)
+    - `period` (str)
+    - `description` (str)
+    - `technologies` (list of str)
+- `certifications` (list of dicts): A list of certifications. Each dictionary has:
+    - `title` (str)
+    - `year` (str)
+    - `institution` (str)
+- `skills` (dict): A dictionary where keys are skill categories (e.g., "frontend", "backend") and values are lists of skill names.
+- `languages` (list of dicts): A list of languages. Each dictionary has:
+    - `name` (str)
+    - `level` (str)
+
+## 6. Template Debugging
 
 When creating or modifying the `.docx` template (`templates/cv_template.docx`), it's possible to introduce Jinja2 syntax errors.
 

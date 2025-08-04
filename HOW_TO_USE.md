@@ -289,13 +289,40 @@ Your backend is now fully configured to work with Supabase!
 
 ---
 
-## Debugging Template Errors
+## Template Customization
+
+The final anonymized document is generated from a `.docx` template located at `templates/cv_template.docx`. You can edit this file to change the layout, formatting, and content of the output.
+
+### Template Variables
+
+The template has access to the following variables:
+
+- `initials` (str): The initials of the person's name.
+- `title` (str): The person's title (e.g., "Software Engineer").
+- `experience_years` (int): The total years of experience, calculated from the `period` of each experience.
+- `current_company` (str): The company of the most recent experience.
+- `experiences` (list of dicts): A list of work experiences. Each dictionary has the following keys:
+    - `title` (str)
+    - `company` (str)
+    - `period` (str)
+    - `description` (str)
+    - `technologies` (list of str)
+- `certifications` (list of dicts): A list of certifications. Each dictionary has:
+    - `title` (str)
+    - `year` (str)
+    - `institution` (str)
+- `skills` (dict): A dictionary where keys are skill categories (e.g., "frontend", "backend") and values are lists of skill names.
+- `languages` (list of dicts): A list of languages. Each dictionary has:
+    - `name` (str)
+    - `level` (str)
+
+### Debugging Template Errors
 
 When you customize the `templates/cv_template.docx` file, you might accidentally introduce a syntax error in the Jinja2 templating language (e.g., `{{ variable }}` or `{% for item in items %}`). Finding these errors can be difficult because they are inside a `.docx` file.
 
 This application includes a special debugging feature to help you.
 
-### How it Works
+#### How it Works
 
 1.  **Enable Debug Mode**: In your `.env` file, make sure `DEBUG` is set to `"True"`.
     ```
