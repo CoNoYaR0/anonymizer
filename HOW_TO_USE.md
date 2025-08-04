@@ -104,19 +104,36 @@ This will display a panel that continuously updates with the server's CPU, memor
 
 ---
 
-## Using the API
+## Using the Application
 
-You can interact with the API using tools like `curl`, Postman, or your web browser.
+The application provides two main functionalities: a web interface for converting `.docx` files into templates, and a REST API for the main CV anonymization pipeline.
 
-### API Documentation (Swagger UI)
+### 1. DOCX to Jinja2 Template Converter (Web Interface)
 
-FastAPI provides interactive API documentation for free. This is the easiest way to explore and test the endpoints.
+This tool allows you to upload a completed `.docx` CV and get back a version with personal data automatically replaced by Jinja2 placeholders (e.g., `{{ name }}`).
+
+*   **URL:** `http://127.0.0.1:8000/converter`
+
+#### How to Use:
+1.  Open the URL in your web browser.
+2.  You will see a file upload form.
+3.  Click to select your `.docx` CV or drag and drop it onto the form.
+4.  Click the **"Convert and Download"** button.
+5.  Your browser will automatically download the converted template file, which will be named something like `YourCV_template.docx`.
+
+### 2. CV Anonymization API
+
+You can interact with the API using tools like `curl`, Postman, or the interactive documentation.
+
+#### API Documentation (Swagger UI)
+
+FastAPI provides interactive API documentation for free. This is the easiest way to explore and test the API endpoints.
 
 *   **URL:** `http://127.0.0.1:8000/docs`
 
 Once you run the server, open this URL in your browser. You will see the Swagger UI, which allows you to see all the endpoints, their parameters, and test them directly from your browser.
 
-### Endpoints
+#### API Endpoints
 
 Here are the main endpoints:
 

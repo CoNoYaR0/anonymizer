@@ -76,3 +76,15 @@ As of now, we have successfully completed the core backend functionality as outl
 ### Debugging & Reliability
 
 *   **Template Debugging:** Implemented a crucial debugging feature for template creation. If the application is run in `DEBUG` mode (`DEBUG=True`) and a `TemplateSyntaxError` occurs during document generation, the system will automatically save the raw, pre-rendering XML of the template to `templates/debug_template.xml`. This allows developers to pinpoint the exact location of Jinja2 syntax errors within the `.docx` file's underlying XML structure, greatly simplifying the template debugging process.
+
+### Feature: DOCX to Jinja2 Template Converter
+
+*   **Objective:** Fulfill the user request to build a standalone tool for converting completed `.docx` CVs into `docxtpl`-compatible Jinja2 templates.
+*   **Implementation:**
+    *   **New Module (`docx_to_template_converter.py`):** Created a new module to house the core conversion logic. It uses `spaCy` and regex to identify dynamic content and `python-docx` to perform the replacements. The entity extraction logic was specifically hardened to be more robust against common NER model errors.
+    *   **New Endpoint (`/convert-to-template`):** Added a new `POST` endpoint to `main.py` that handles `.docx` file uploads, orchestrates the conversion process, and returns the generated template file for download.
+    *   **Web Interface (`/converter`):** Added a simple, user-friendly HTML page with a drag-and-drop form to make the feature accessible to non-technical users.
+    *   **Testing:** Created a new test suite (`tests/test_converter.py`) using `pytest` to provide integration testing for the new feature, ensuring its reliability.
+*   **Git Hygiene:**
+    *   Resolved a merge conflict caused by a cached `__pycache__` file.
+    *   Updated the `.gitignore` file to properly ignore `__pycache__` directories, preventing similar issues in the future.
