@@ -87,10 +87,11 @@ You are a meticulous QA engineer specializing in `docxtpl` Jinja2 templates. You
 
         if validation_result.get("is_valid"):
             logger.info("[Stage 3] LLM QA Review PASSED.")
+            return {"is_valid": True, "issues": []}
         else:
-            logger.warning(f"[Stage 3] LLM QA Review FAILED. Issues: {validation_result.get('issues', [])}")
-
-        return validation_result
+            issues = validation_result.get('issues', [])
+            logger.warning(f"[Stage 3] LLM QA Review FAILED. Raising QAValidationError with {len(issues)} issues.")
+            raise QAValidationError("LLM QA validation failed.", issues=issues)
 
     except (RateLimitError, APIError) as e:
         logger.error(f"[Stage 3] OpenAI API error during validation: {e}")
