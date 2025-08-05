@@ -60,10 +60,11 @@ async def create_template_from_pdf_endpoint(file: UploadFile = File(...)):
         # For now, we return it directly for validation.
         logger.info("Successfully created HTML template from PDF.")
 
-        return FileResponse(
+        headers = {'Content-Disposition': f'attachment; filename="generated_template_for_{file.filename.replace(".pdf", ".html")}"'}
+        return StreamingResponse(
             io.BytesIO(html_template_str.encode('utf-8')),
             media_type="text/html",
-            filename=f"generated_template_for_{file.filename.replace('.pdf', '.html')}"
+            headers=headers
         )
 
     except (ValueError, HTTPException) as e:
