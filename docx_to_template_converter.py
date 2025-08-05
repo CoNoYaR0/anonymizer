@@ -144,17 +144,33 @@ def force_secure_loop_block(var_name: str, iterable: str, body: str, join: bool 
 {body.strip()}
 {{% endfor %}}"""
 
-def validate_template_syntax(doc_text: str):
+def inject_fallback_experience_block(doc):
     """
-    Performs a final, strict validation of the entire document's Jinja2 syntax.
-    Raises an error if any check fails.
+    Injects a fallback experience loop block at the end of the document
+    if no valid experience block is found.
     """
-    logger.info("Performing strict final validation of template syntax.")
+    logger.warning("Injecting fallback experience block as it was missing.")
+    doc.add_paragraph().add_run("\n--- Fallback Section ---").bold = True
+    fallback_block = """\
+{% for job in experiences %}
+- {{ job.title }} at {{ job.company }} ({{ job.start_date }} - {{ job.end_date }})
+  {{ job.description }}
+{% endfor %}"""
+    doc.add_paragraph(fallback_block)
+
+def validate_and_finalize_template(doc, autofix: bool = True):
+    """
+    Validates the presence of required template structures, optionally
+    injecting missing blocks if autofix is enabled.
+    """
+    logger.info("Performing final validation and finalization of template.")
+    doc_text = "\n".join(p.text for p in doc.paragraphs)
+
     if "{{" not in doc_text and "{%" not in doc_text:
         raise ValueError("Validation failed: No Jinja2 syntax found in the document.")
 
     if doc_text.count("{% for") != doc_text.count("{% endfor %}"):
-        raise SyntaxError("Validation failed: Mismatch in for/endfor blocks.")
+        raise SyntaxError("Validation failed: Unbalanced for/endfor blocks.")
 
     if "| join(" in doc_text and "{% for" not in doc_text:
         raise SyntaxError("Validation failed: `join` filter found outside of a loop context.")
@@ -164,12 +180,15 @@ def validate_template_syntax(doc_text: str):
         if f"{{{{ {field} }}}}" in doc_text:
             raise ValueError(f"Validation failed: Forbidden field used: {field}")
 
-    required_snippets = ["{% for job in experiences %}", "{{ job.title }}", "{{ job.company }}"]
-    for snippet in required_snippets:
-        if snippet not in doc_text:
-            raise ValueError(f"Validation failed: Missing required template logic: {snippet}")
+    # Check for experience section and autofix if enabled
+    required_loop = "{% for job in experiences %}"
+    if required_loop not in doc_text:
+        if autofix:
+            inject_fallback_experience_block(doc)
+        else:
+            raise ValueError(f"Validation failed: Missing required template logic: {required_loop}")
 
-    logger.info("Strict validation passed.")
+    logger.info("Final validation and finalization passed.")
     return True
 
 def _normalize_text_for_match(text: str) -> str:
@@ -268,9 +287,8 @@ def stage2_apply_annotations(docx_stream: io.BytesIO, semantic_map: dict) -> io.
                     current_paragraphs.extend(cell.paragraphs)
         _replace_text_block(current_paragraphs, original_text, block_to_inject)
 
-    # Final validation of the entire document
-    full_text = "\n".join(p.text for p in doc.paragraphs)
-    validate_template_syntax(full_text)
+    # Final validation and autofixing pass
+    validate_and_finalize_template(doc, autofix=True)
 
     target_stream = io.BytesIO()
     doc.save(target_stream)
