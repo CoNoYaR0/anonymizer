@@ -5,7 +5,7 @@ from typing import IO
 from openai import OpenAI
 from pdf2image import convert_from_bytes
 from PIL import Image
-from jinja2 import Environment, TemplateSyntaxError
+from liquid import Environment as LiquidEnvironment, LiquidSyntaxError
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -47,14 +47,14 @@ def _pdf_to_html(file_stream: IO[bytes]) -> str:
         logger.debug(f"Prepared page {i+1} for LLM vision.")
 
     system_prompt = """
-You are an expert web developer. Your task is to look at a sequence of images from a CV and perfectly replicate its combined layout and content as a single, clean HTML file with inline CSS.
+You are an expert web developer and digital archivist. Your task is to look at a sequence of images from a CV and perfectly replicate its combined layout, styling, and content as a single, clean HTML file with inline CSS. Your goal is maximum fidelity.
 
-**Rules:**
-1.  You MUST use inline CSS for styling (e.g., `<p style="color: blue;">`).
-2.  Combine the content from all images into a single, coherent HTML document.
-3.  The output MUST be a single, complete HTML string.
-4.  Do not include any commentary or explanation outside of the HTML code.
-5.  Replicate the text content and layout as precisely as possible.
+**CRITICAL RULES:**
+1.  **PIXEL-PERFECT REPLICATION:** The output MUST be a visually identical, pixel-perfect recreation of the source images. Do NOT simplify, reinterpret, or deviate from the original design.
+2.  **INLINE CSS:** You MUST use inline CSS for all styling (`style="..."`).
+3.  **COMBINE IMAGES:** Combine the content from all images into a single, coherent HTML document.
+4.  **CLEAN CODE:** The output MUST be only a single, complete HTML string. Do not include any commentary, explanation, or markdown fences.
+5.  **PRECISION:** Replicate text content, font choices, colors, spacing, and layout with extreme precision.
 """
     user_content = [
         {
@@ -89,27 +89,27 @@ You are an expert web developer. Your task is to look at a sequence of images fr
         raise ValueError("Failed to convert PDF to HTML using the LLM.")
 
 
-def _validate_jinja2_syntax(template_string: str):
+def _validate_liquid_syntax(template_string: str):
     """
-    Validates the Jinja2 syntax of a template string.
-    Raises jinja2.TemplateSyntaxError on failure.
+    Validates the Liquid syntax of a template string.
+    Raises liquid.LiquidSyntaxError on failure.
     """
-    logger.info("Validating Jinja2 syntax.")
+    logger.info("Validating Liquid syntax.")
     try:
-        env = Environment()
+        env = LiquidEnvironment()
         env.parse(template_string)
-        logger.info("Jinja2 syntax is valid.")
-    except TemplateSyntaxError as e:
-        logger.warning(f"Jinja2 syntax validation failed: {e}")
+        logger.info("Liquid syntax is valid.")
+    except LiquidSyntaxError as e:
+        logger.warning(f"Liquid syntax validation failed: {e}")
         raise e
 
 
 def create_template_from_pdf(file_stream: IO[bytes]) -> str:
     """
-    Orchestrates the creation of a Jinja2 HTML template from a PDF file.
+    Orchestrates the creation of a Liquid HTML template from a PDF file.
     This is a two-step process:
     1. Convert the PDF's visual layout to raw HTML.
-    2. Use a second LLM call to inject Jinja2 placeholders into the HTML,
+    2. Use a second LLM call to inject Liquid placeholders into the HTML,
        with a validation and self-correction loop.
     """
     logger.info("[template_builder.create_template_from_pdf] Orchestrating template creation.")
@@ -117,17 +117,17 @@ def create_template_from_pdf(file_stream: IO[bytes]) -> str:
     # Step 1: Convert PDF to raw HTML
     raw_html = _pdf_to_html(file_stream)
 
-    # Step 2: Inject Jinja2 placeholders with a validation and self-correction loop
+    # Step 2: Inject Liquid placeholders with a validation and self-correction loop
     max_retries = 3
     last_error = None
     templated_html = ""
     client = OpenAI()
 
     system_prompt = """
-You are a Jinja2 templating expert. Your task is to take a raw HTML file representing a CV and intelligently replace the specific personal details (names, companies, dates, skills, etc.) with the correct Jinja2 placeholders.
+You are a Liquid templating expert. Your task is to take a raw HTML file representing a CV and intelligently replace the specific personal details (names, companies, dates, skills, etc.) with the correct Liquid placeholders.
 
 **Rules:**
-1.  **PERFECT SYNTAX:** Your generated Jinja2 code MUST be syntactically flawless. Every `{% for ... %}` must have a matching `{% endfor %}`.
+1.  **PERFECT SYNTAX:** Your generated Liquid code MUST be syntactically flawless. Every `{% for ... %}` must have a matching `{% endfor %}`.
 2.  **NO HTML CHANGES:** Do NOT change the HTML structure or CSS styling in any way.
 3.  **STANDARD PLACEHOLDERS:**
     -   Names: `{{ name }}`
@@ -136,20 +136,20 @@ You are a Jinja2 templating expert. Your task is to take a raw HTML file represe
 4.  **LOOPS:**
     -   Work Experience/Education: Use `{% for job in experiences %}` or `{% for edu in educations %}`.
     -   Inside loops, use correct variables: `{{ job.title }}`, `{{ edu.institution }}`.
-    -   Skills (grouped by category): Use `{% for category, tools in skills.items() %}`.
+    -   For lists of skills (dictionaries), use a loop like this: `{% for skill in skills %}{{ skill[0] }}: {{ skill[1] | join: ', ' }}{% endfor %}`.
 5.  **OUTPUT:** Your output MUST be only the final, templated HTML code. Do not add commentary.
 """
     user_html_prompt = f"Here is the raw HTML to be templated:\n\n```html\n{raw_html}\n```"
 
 
     for attempt in range(max_retries):
-        logger.info(f"Attempt {attempt + 1} of {max_retries} to inject and validate Jinja2 syntax.")
+        logger.info(f"Attempt {attempt + 1} of {max_retries} to inject and validate Liquid syntax.")
 
         feedback_prompt = ""
         if last_error:
             feedback_prompt = (
                 "\n\n---\n"
-                "**IMPORTANT:** Your previous attempt failed with a Jinja2 syntax error. "
+                "**IMPORTANT:** Your previous attempt failed with a Liquid syntax error. "
                 "You MUST fix this specific issue. Do not repeat the mistake.\n"
                 f"**Error Message:** `{last_error}`\n"
                 "---"
@@ -174,16 +174,16 @@ You are a Jinja2 templating expert. Your task is to take a raw HTML file represe
                 templated_html = templated_html[:-3]
 
             # Validate the generated syntax
-            _validate_jinja2_syntax(templated_html)
+            _validate_liquid_syntax(templated_html)
 
             logger.info("Successfully generated and validated template.")
             return templated_html.strip()
 
-        except TemplateSyntaxError as e:
+        except LiquidSyntaxError as e:
             logger.warning(f"Attempt {attempt + 1} failed validation. Error: {e}")
             last_error = e
         except Exception as e:
-            logger.error(f"An unexpected error occurred during Jinja2 injection attempt {attempt + 1}: {e}", exc_info=True)
+            logger.error(f"An unexpected error occurred during Liquid injection attempt {attempt + 1}: {e}", exc_info=True)
             raise ValueError(f"An unexpected error occurred during template generation: {e}")
 
     logger.error("Failed to generate a valid template after multiple retries.")
