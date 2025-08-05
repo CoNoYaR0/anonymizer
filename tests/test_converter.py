@@ -38,37 +38,33 @@ def test_convert_to_template_endpoint_success(sample_docx_stream: io.BytesIO, mo
     Tests the /convert-to-template endpoint with a valid .docx file,
     mocking the LLM call to ensure deterministic results.
     """
-    # 1. Define the mock structured data that the LLM would return
-    mock_structured_data = {
-        "name": "Jean Dupont",
-        "job_title": "Développeur",
-        "contact": {
-            "email": "jean.dupont@email.com",
-            "phone": "01 23 45 67 89"
+    # 1. Define the mock semantic map that the LLM would return
+    mock_semantic_map = {
+        "simple_replacements": {
+            "Jean Dupont": "{{ name }}",
+            "Développeur": "{{ title }}",
+            "jean.dupont@email.com": "{{ email }}"
         },
-        "experiences": [
+        "block_replacements": [
             {
-                "title": "Développeuse Web – fullstack",
-                "company": "Creative Web",
-                "period": "Octobre 2018 - Octobre 2025",
-                "tasks": [
-                    "Refonte complète et maintenance d’un CMS",
-                    "Développement backend d’API REST"
-                ]
+                "original_block": "Développeuse Web – fullstack\nCreative Web\nOctobre 2018 - Octobre 2025\nMISSIONS :\nRefonte complète et maintenance d’un CMS\nDéveloppement backend d’API REST",
+                "new_block": "{% for job in experiences %}{{ job.title }}{% endfor %}" # This will be deterministically replaced
             }
         ]
     }
 
-    def mock_get_structured_data(text: str):
-        return mock_structured_data
+    def mock_get_semantic_map(text: str, feedback_issues: list | None = None):
+        # The mock doesn't need to use the feedback, just accept it
+        return mock_semantic_map
 
     # 2. Apply the mocks
     monkeypatch.setattr(
-        "docx_to_template_converter._get_structured_data_from_llm",
-        mock_get_structured_data
+        "docx_to_template_converter._get_semantic_map_from_llm",
+        mock_get_semantic_map
     )
+    # We also mock the final QA stage to isolate Stage 1 and 2
     monkeypatch.setattr(
-        "main.validate_template_with_llm",
+        "template_qa.validate_template_with_llm",
         lambda docx_stream: {"is_valid": True, "issues": []}
     )
 
@@ -83,20 +79,19 @@ def test_convert_to_template_endpoint_success(sample_docx_stream: io.BytesIO, mo
     # Read the content of the response
     response_stream = io.BytesIO(response.content)
     returned_doc = docx.Document(response_stream)
-
     returned_text = "\n".join([p.text for p in returned_doc.paragraphs])
     print(f"Returned text:\n---\n{returned_text}\n---")
 
-    # Check for simple replacements
-    assert "{{ user_initials }}" in returned_text
-    assert "{{ job_title }}" in returned_text
+    # Check for simple replacements that were in the mock
+    assert "{{ name }}" in returned_text
+    assert "{{ title }}" in returned_text
     assert "Contact: {{ email }}" in returned_text
 
-    # Check for block replacement
+    # Check for the deterministically generated block replacement
     assert "{% for job in experiences %}" in returned_text
     assert "{{ job.title }}" in returned_text
     assert "{{ job.company }}" in returned_text
-    assert "{% for task in job.tasks %}" in returned_text
+    assert "{{ job.description }}" in returned_text
     assert "{% endfor %}" in returned_text
 
     # Check that original data is gone
