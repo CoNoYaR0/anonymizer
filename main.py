@@ -45,7 +45,7 @@ async def create_template_from_pdf_endpoint(file: UploadFile = File(...)):
     Jinja2 template. The template is not stored in this version but returned
     to the user for inspection.
     """
-    logger.info(f"Received file '{file.filename}' for template creation.")
+    logger.info(f"[/templates/create-from-pdf] Received file '{file.filename}' for template creation.")
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload a PDF.")
 

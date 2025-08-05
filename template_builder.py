@@ -15,6 +15,7 @@ def _pdf_to_html(file_stream: IO[bytes]) -> str:
     by first converting each page to an image and then sending them to a
     multimodal LLM.
     """
+    logger.info("[template_builder._pdf_to_html] Starting PDF to HTML conversion.")
     logger.info("Converting PDF to images for vision analysis.")
     try:
         pdf_bytes = file_stream.read()
@@ -96,6 +97,7 @@ def create_template_from_pdf(file_stream: IO[bytes]) -> str:
     replace specific text with Jinja2 placeholders while preserving the surrounding HTML.
     For this version, we will just return the raw HTML as a proof of concept.
     """
+    logger.info("[template_builder.create_template_from_pdf] Orchestrating template creation.")
     html_content = _pdf_to_html(file_stream)
 
     # TODO: Implement sophisticated text-to-Jinja2 replacement logic here.
