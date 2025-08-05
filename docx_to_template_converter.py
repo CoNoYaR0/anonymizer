@@ -124,8 +124,14 @@ def _replace_text_in_paragraph(paragraph: 'docx.text.paragraph.Paragraph', repla
 def _delete_paragraph(paragraph):
     """Helper function to delete a paragraph from its parent."""
     p = paragraph._element
-    p.getparent().remove(p)
-    paragraph._p = paragraph._element = None
+    # Only try to remove the paragraph if it has a parent.
+    if p.getparent() is not None:
+        p.getparent().remove(p)
+        # Set the paragraph's element to None to indicate it's been removed
+        paragraph._p = paragraph._element = None
+    else:
+        # This can happen if the paragraph was already part of a block that got deleted.
+        logger.warning("Attempted to delete a paragraph that has already been removed or orphaned. Skipping.")
 
 def _normalize_text_for_match(text: str) -> str:
     """Aggressively normalizes text to ensure a match."""
