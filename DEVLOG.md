@@ -34,3 +34,4 @@ The goal of this project is to create a backend service that can take a CV in PD
     *   **Workflow 1 (Template Creation):** A user's styled PDF will be converted by a vision-capable LLM into high-fidelity HTML/CSS, which will then be turned into a reusable Jinja2 template.
     *   **Workflow 2 (CV Anonymization):** New CVs will be processed to extract a canonical JSON object, which will then be rendered into the user's HTML template and delivered as a clean PDF or HTML string.
 *   **Reasoning:** This approach eliminates the error-prone `.docx` format from the output pipeline, gives us full programmatic control over templating, reduces LLM costs by removing the complex QA/refinement loop, and produces a more professional and reliable end product. This marks the final and most robust iteration of the system.
+*   **Post-Migration Fix:** Corrected the package name for `mammoth` in `requirements.txt` to ensure dependencies install correctly.
