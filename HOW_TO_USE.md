@@ -44,7 +44,7 @@ This project uses several Python libraries. Install them using the `requirements
 ```bash
 pip install -r requirements.txt
 ```
-This will install FastAPI, Uvicorn, EasyOCR, spaCy, and all other necessary packages. The first time you run this, it might take a while as it needs to download machine learning models.
+This will install FastAPI, Uvicorn, and all other necessary runtime packages for the application.
 
 ### 3. Set Up Environment Variables
 
@@ -94,7 +94,12 @@ The API is now available at `http://127.0.0.1:8000`.
 
 This project includes a live CLI dashboard to monitor the status of the API in real-time.
 
-To run the dashboard, first ensure the main FastAPI server is running. Then, in a separate terminal, run:
+To run the dashboard, you will first need to install the development dependencies:
+```bash
+pip install -r dev-requirements.txt
+```
+
+Then, with the main FastAPI server running, open a separate terminal and run:
 
 ```bash
 python monitor.py
