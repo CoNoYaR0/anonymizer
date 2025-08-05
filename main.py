@@ -323,6 +323,7 @@ async def convert_cv_to_template_endpoint(file: UploadFile = File(...)):
 
         for attempt in range(MAX_RETRIES):
             logger.info(f"Starting conversion attempt {attempt + 1}/{MAX_RETRIES}...")
+            # Use a new stream for each attempt
             docx_stream = io.BytesIO(docx_bytes)
 
             try:
@@ -334,11 +335,12 @@ async def convert_cv_to_template_endpoint(file: UploadFile = File(...)):
                     feedback_issues=feedback_issues
                 )
 
-                # Stage 3: LLM QA Review
+                # Stage 3: LLM QA Review - this will raise QAValidationError on failure
                 validate_template_with_llm(templated_stream)
 
-                # If QA passes, we're done
-                logger.info("Pipeline successful! Template passed all validation checks.")
+                # --- Success Case ---
+                # This code is only reached if validate_template_with_llm does NOT raise an exception.
+                logger.info(f"Pipeline successful on attempt {attempt + 1}! Template passed all validation checks.")
                 templated_stream.seek(0)
 
                 template_filename = file.filename.replace('.docx', '_template.docx')
@@ -350,12 +352,12 @@ async def convert_cv_to_template_endpoint(file: UploadFile = File(...)):
                 )
 
             except QAValidationError as qa_error:
-                logger.warning(f"Attempt {attempt + 1} failed QA. Issues: {qa_error.issues}")
+                logger.warning(f"Attempt {attempt + 1} failed QA. Storing feedback for next attempt. Issues: {qa_error.issues}")
                 feedback_issues = qa_error.issues # Feed issues back into the next loop
-                # The original docx_bytes are already loaded, so the loop can just continue
-                continue
+                # The loop will now naturally continue to the next iteration
 
-        # If the loop finishes without success
+        # --- Failure Case ---
+        # This code is only reached if the loop completes without a successful return.
         logger.error(f"Failed to produce a valid template after {MAX_RETRIES} attempts.")
         return JSONResponse(
             status_code=400,
@@ -366,6 +368,7 @@ async def convert_cv_to_template_endpoint(file: UploadFile = File(...)):
         )
 
     except ValueError as ve:
+        # Catches fatal errors from the pipeline that are not QA related
         logger.error(f"Fatal value error during template conversion: {ve}", exc_info=False)
         return JSONResponse(status_code=400, content={"error": str(ve)})
     except Exception as e:
