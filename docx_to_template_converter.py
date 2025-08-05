@@ -10,6 +10,12 @@ from spacy.tokens import Doc
 # Configure logger
 logger = logging.getLogger(__name__)
 
+class QAValidationError(Exception):
+    """Custom exception for non-fatal QA validation failures."""
+    def __init__(self, message, issues):
+        super().__init__(message)
+        self.issues = issues
+
 def _extract_text_from_docx(docx_stream: io.BytesIO) -> str:
     """Extracts all text from a .docx file stream."""
     try:
@@ -31,12 +37,14 @@ def _extract_text_from_docx(docx_stream: io.BytesIO) -> str:
     docx_stream.seek(0)
     return full_text
 
-def _get_semantic_map_from_llm(text: str) -> dict:
+def _get_semantic_map_from_llm(text: str, feedback_issues: list | None = None) -> dict:
     """
     Generates a structured semantic map by calling the OpenAI API.
-    The map includes simple replacements and complex block replacements for loops.
+    Optionally includes feedback from a previous failed attempt to guide the LLM.
     """
     logger.info("[Stage 1a] Generating semantic map via LLM.")
+    if feedback_issues:
+        logger.info(f"This is a retry. Incorporating {len(feedback_issues)} feedback points.")
 
     if not os.getenv("OPENAI_API_KEY"):
         raise ValueError("OPENAI_API_KEY environment variable is not set.")
@@ -79,12 +87,25 @@ MISSIONS :
 **Final Instruction:**
 Before creating the final JSON, double-check all generated Jinja2 code in the `new_block` values for syntax errors. Your output must be flawless. Your output MUST be ONLY a valid JSON object.
 """
+    user_prompt = f"Here is the CV text to be templated:\n\n```\n{text}\n```"
+
+    if feedback_issues:
+        feedback_prompt = (
+            "IMPORTANT: This is a second attempt. Your previous attempt failed QA with the following errors. "
+            "You MUST correct these specific errors in your new response. DO NOT repeat these mistakes.\n\n"
+            "ERRORS TO FIX:\n"
+        )
+        for issue in feedback_issues:
+            feedback_prompt += f"- {issue.get('error_type')}: {issue.get('description')}\n"
+
+        user_prompt += f"\n\n{feedback_prompt}"
+
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Here is the CV text to be templated:\n\n```\n{text}\n```"},
+                {"role": "user", "content": user_prompt},
             ],
             temperature=0.0,
             response_format={"type": "json_object"},
@@ -100,13 +121,13 @@ Before creating the final JSON, double-check all generated Jinja2 code in the `n
         logger.error(f"[Stage 1a] Failed to get semantic map from LLM: {e}", exc_info=True)
         raise
 
-def stage1_get_semantic_map(text: str, use_llm: bool = True) -> dict:
+def stage1_get_semantic_map(text: str, use_llm: bool = True, feedback_issues: list | None = None) -> dict:
     """
     STAGE 1: Controller for generating the semantic map.
     """
     logger.info("[Stage 1] Starting semantic map generation.")
     if use_llm:
-        return _get_semantic_map_from_llm(text)
+        return _get_semantic_map_from_llm(text, feedback_issues=feedback_issues)
     else:
         logger.warning("[Stage 1] Non-LLM method is not supported for this advanced templating. LLM is required.")
         return {"simple_replacements": {}, "block_replacements": []}
@@ -297,9 +318,15 @@ def stage2_apply_annotations(docx_stream: io.BytesIO, semantic_map: dict) -> io.
     return target_stream
 
 
-def convert_docx_to_template(docx_stream: io.BytesIO, nlp_model: 'spacy.lang.en.English', use_llm: bool = True) -> io.BytesIO:
+def convert_docx_to_template(
+    docx_stream: io.BytesIO,
+    nlp_model: 'spacy.lang.en.English',
+    use_llm: bool = True,
+    feedback_issues: list | None = None
+) -> io.BytesIO:
     """
     Orchestrates the multi-stage process of converting a DOCX to a Jinja2 template.
+    Can accept feedback from a previous failed run to attempt self-correction.
     """
     logger.info("Starting multi-stage template conversion process.")
     full_text = _extract_text_from_docx(docx_stream)
@@ -307,8 +334,8 @@ def convert_docx_to_template(docx_stream: io.BytesIO, nlp_model: 'spacy.lang.en.
         logger.warning("No text found in the document. Returning original file.")
         return docx_stream
 
-    # Stage 1: Get Semantic Map
-    semantic_map = stage1_get_semantic_map(full_text, use_llm=use_llm)
+    # Stage 1: Get Semantic Map, potentially with feedback from a previous run
+    semantic_map = stage1_get_semantic_map(full_text, use_llm=use_llm, feedback_issues=feedback_issues)
     if not semantic_map.get("simple_replacements") and not semantic_map.get("block_replacements"):
         logger.warning("No entities found to replace. Returning original document.")
         return docx_stream

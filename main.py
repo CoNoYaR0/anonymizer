@@ -25,7 +25,7 @@ from docx.shared import Inches
 import psutil
 from llm_refiner import refine_extraction_with_llm
 from template_generator import generate_cv_from_template
-from docx_to_template_converter import convert_docx_to_template
+from docx_to_template_converter import convert_docx_to_template, QAValidationError
 from template_qa import validate_template_with_llm
 
 # Get a logger for the current module
@@ -305,65 +305,69 @@ async def anonymize_cv_by_id(extraction_id: int):
 
 
 @app.post("/convert-to-template")
-async def convert_cv_to_template(file: UploadFile = File(...)):
+async def convert_cv_to_template_endpoint(file: UploadFile = File(...)):
     """
-    Uploads a .docx CV, replaces personal data with Jinja2 placeholders,
-    and returns the resulting file as a downloadable template.
+    Uploads a .docx CV and orchestrates a multi-stage, self-correcting
+    pipeline to convert it into a robust Jinja2 template.
     """
     logger.info(f"Received file '{file.filename}' for template conversion.")
     if file.content_type != "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         logger.warning(f"Invalid file type '{file.content_type}' received.")
-        error_message = "Invalid file type. Please upload a valid .docx file."
-        return JSONResponse(status_code=400, content={"error": error_message})
+        return JSONResponse(status_code=400, content={"error": "Invalid file type. Please upload a valid .docx file."})
+
+    MAX_RETRIES = 3
+    feedback_issues = None
 
     try:
         docx_bytes = await file.read()
-        docx_stream = io.BytesIO(docx_bytes)
 
-        # The nlp model is already loaded globally
-        logger.info("Starting template conversion process...")
-        # By default, use the LLM-powered pipeline
-        template_stream = convert_docx_to_template(docx_stream, nlp, use_llm=True)
+        for attempt in range(MAX_RETRIES):
+            logger.info(f"Starting conversion attempt {attempt + 1}/{MAX_RETRIES}...")
+            docx_stream = io.BytesIO(docx_bytes)
 
-        # Stage 3: LLM QA Review
-        validation_result = validate_template_with_llm(template_stream)
+            try:
+                # Stages 1 & 2: Semantic mapping and deterministic annotation
+                templated_stream = convert_docx_to_template(
+                    docx_stream,
+                    nlp,
+                    use_llm=True,
+                    feedback_issues=feedback_issues
+                )
 
-        if not validation_result.get("is_valid"):
-            logger.error(f"LLM QA validation failed. Issues: {validation_result.get('issues')}")
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "error": "The generated template failed quality assurance.",
-                    "issues": validation_result.get("issues", [])
-                }
-            )
+                # Stage 3: LLM QA Review
+                validate_template_with_llm(templated_stream)
 
-        logger.info("Template conversion and validation process finished successfully.")
-        template_stream.seek(0) # Reset stream after validation read
+                # If QA passes, we're done
+                logger.info("Pipeline successful! Template passed all validation checks.")
+                templated_stream.seek(0)
 
-        # Create a new filename for the template
-        original_filename = file.filename
-        template_filename = original_filename.replace('.docx', '_template.docx')
+                template_filename = file.filename.replace('.docx', '_template.docx')
+                headers = {'Content-Disposition': f'attachment; filename="{template_filename}"'}
+                return StreamingResponse(
+                    templated_stream,
+                    media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    headers=headers
+                )
 
-        # Set headers for file download
-        headers = {
-            'Content-Disposition': f'attachment; filename="{template_filename}"'
-        }
+            except QAValidationError as qa_error:
+                logger.warning(f"Attempt {attempt + 1} failed QA. Issues: {qa_error.issues}")
+                feedback_issues = qa_error.issues # Feed issues back into the next loop
+                # The original docx_bytes are already loaded, so the loop can just continue
+                continue
 
-        return StreamingResponse(
-            template_stream,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers=headers
+        # If the loop finishes without success
+        logger.error(f"Failed to produce a valid template after {MAX_RETRIES} attempts.")
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "The document could not be converted into a high-quality template after multiple refinement attempts.",
+                "final_issues": feedback_issues,
+            },
         )
 
     except ValueError as ve:
-        # Handle specific errors raised from the converter, like corrupted files
-        logger.error(f"Value error during template conversion: {ve}", exc_info=False) # No need for full stack trace here
-        error_message = (
-            "Could not process the .docx file. It may be corrupted, an older format (.doc), "
-            "or not a standard .docx file. Please try re-saving it in Microsoft Word and uploading again."
-        )
-        return JSONResponse(status_code=400, content={"error": error_message})
+        logger.error(f"Fatal value error during template conversion: {ve}", exc_info=False)
+        return JSONResponse(status_code=400, content={"error": str(ve)})
     except Exception as e:
-        logger.critical(f"An unexpected error occurred during template conversion for '{file.filename}': {e}", exc_info=True)
+        logger.critical(f"An unexpected fatal error occurred for '{file.filename}': {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"error": "An unexpected server error occurred."})
