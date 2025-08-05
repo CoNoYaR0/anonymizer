@@ -5,7 +5,7 @@ from typing import IO
 from openai import OpenAI
 from pdf2image import convert_from_bytes
 from PIL import Image
-from liquid import Environment as LiquidEnvironment, LiquidSyntaxError
+from liquid import Liquid
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -92,15 +92,14 @@ You are an expert web developer and digital archivist. Your task is to look at a
 def _validate_liquid_syntax(template_string: str):
     """
     Validates the Liquid syntax of a template string.
-    Raises liquid.LiquidSyntaxError on failure.
+    Raises an exception on failure.
     """
     logger.info("Validating Liquid syntax.")
     try:
-        env = LiquidEnvironment()
-        env.parse(template_string)
+        Liquid(template_string, from_file=False)
         logger.info("Liquid syntax is valid.")
-    except LiquidSyntaxError as e:
-        logger.warning(f"Liquid syntax validation failed: {e}")
+    except Exception as e:
+        # Re-raise, to be caught by the main loop
         raise e
 
 
@@ -179,9 +178,14 @@ You are a Liquid templating expert. Your task is to take a raw HTML file represe
             logger.info("Successfully generated and validated template.")
             return templated_html.strip()
 
-        except LiquidSyntaxError as e:
-            logger.warning(f"Attempt {attempt + 1} failed validation. Error: {e}")
-            last_error = e
+        except Exception as e:
+            if type(e).__name__ == 'TemplateSyntaxError':
+                logger.warning(f"Attempt {attempt + 1} failed validation. Error: {e}")
+                last_error = e
+            else:
+                # It's a different, unexpected error
+                logger.error(f"An unexpected error occurred during Liquid injection attempt {attempt + 1}: {e}", exc_info=True)
+                raise ValueError(f"An unexpected error occurred during template generation: {e}")
         except Exception as e:
             logger.error(f"An unexpected error occurred during Liquid injection attempt {attempt + 1}: {e}", exc_info=True)
             raise ValueError(f"An unexpected error occurred during template generation: {e}")
