@@ -12,3 +12,5 @@ psutil
 httpx
 openai
 docxtpl
+python-mammoth
+weasyprint

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ name }} - {{ title }}</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f8f8;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: row;
+        }
+        .left-column {
+            width: 65%;
+            padding-right: 30px;
+            border-right: 2px solid #eee;
+        }
+        .right-column {
+            width: 35%;
+            padding-left: 30px;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            width: 100%;
+        }
+        header h1 {
+            font-size: 2.5em;
+            margin: 0;
+            color: #2c3e50;
+        }
+        header p {
+            font-size: 1.2em;
+            margin: 5px 0;
+            color: #3498db;
+        }
+        .section {
+            margin-bottom: 25px;
+        }
+        .section h2 {
+            font-size: 1.5em;
+            color: #3498db;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+        }
+        .job {
+            margin-bottom: 20px;
+            padding-left: 15px;
+            border-left: 3px solid #ecf0f1;
+        }
+        .job h3 {
+            font-size: 1.2em;
+            margin: 0 0 2px 0;
+            color: #2c3e50;
+        }
+        .job .company {
+            font-weight: bold;
+            color: #7f8c8d;
+        }
+        .job .date {
+            font-style: italic;
+            color: #95a5a6;
+            font-size: 0.9em;
+        }
+        .job ul {
+            padding-left: 20px;
+            margin-top: 5px;
+        }
+        .skills-list, .contact-list {
+            list-style: none;
+            padding: 0;
+        }
+        .skills-list li, .contact-list li {
+            background: #ecf0f1;
+            padding: 5px 10px;
+            margin-bottom: 5px;
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+        .skills-list strong {
+            color: #3498db;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left-column">
+            <header>
+                <h1>{{ name }}</h1>
+                <p>{{ title }}</p>
+            </header>
+
+            <div class="section" id="summary">
+                <h2>Summary</h2>
+                <p>{{ summary }}</p>
+            </div>
+
+            <div class="section" id="experience">
+                <h2>Experience</h2>
+                {% for job in experiences %}
+                <div class="job">
+                    <h3>{{ job.title }}</h3>
+                    <p class="company">{{ job.company }}</p>
+                    <p class="date">{{ job.start_date }} - {{ job.end_date }}</p>
+                    <ul>
+                        {% for task in job.missions %}
+                        <li>{{ task }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="right-column">
+            <div class="section" id="contact">
+                <h2>Contact</h2>
+                <ul class="contact-list">
+                    <li>Email: {{ email }}</li>
+                    <li>Phone: {{ phone }}</li>
+                    <li>Location: {{ location }}</li>
+                </ul>
+            </div>
+
+            <div class="section" id="skills">
+                <h2>Skills</h2>
+                {% for category, tools in skills.items() %}
+                    <ul class="skills-list">
+                        <li><strong>{{ category }}:</strong> {{ tools | join(', ') }}</li>
+                    </ul>
+                {% endfor %}
+            </div>
+
+            <div class="section" id="education">
+                <h2>Education</h2>
+                {% for edu in educations %}
+                <div class="education-item">
+                    <p><strong>{{ edu.title }}</strong></p>
+                    <p>{{ edu.institution }} ({{ edu.date }})</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

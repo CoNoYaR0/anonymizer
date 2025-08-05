@@ -2,27 +2,18 @@ import logger_config # Import to configure logging
 import logging
 from dotenv import load_dotenv, find_dotenv
 
-# Load environment variables from .env file BEFORE any other imports that might
-# depend on them (like llm_refiner). find_dotenv() will locate the .env file
-# in the project root.
+# Load environment variables from .env file.
 load_dotenv(find_dotenv())
 
 import os
-import re
-import uuid
-import hashlib
-from fastapi import FastAPI, File, UploadFile, HTTPException, Body
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
-from pydantic import BaseModel, Field
-import pytesseract
-from pdf2image import convert_from_bytes
-from supabase import create_client, Client
 import io
-import psutil
-from llm_refiner import refine_extraction_with_llm
-from template_generator import generate_cv_from_template
-from docx_to_template_converter import convert_docx_to_template, QAValidationError
-from template_qa import validate_template_with_llm
+
+# Import the new, modularized components
+from content_extractor import extract_json_from_cv
+from template_builder import create_template_from_pdf
+from renderer import render_html_to_pdf
 
 # Get a logger for the current module
 logger = logging.getLogger(__name__)
@@ -30,331 +21,101 @@ logger = logging.getLogger(__name__)
 # --- Environment-based Configuration ---
 DEBUG_MODE = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 
-# --- Pydantic Models for Data Validation ---
+# Initialize FastAPI app
+app = FastAPI(
+    title="CV Templating API",
+    description="A robust, PDF/HTML-first API for creating and using professional CV templates.",
+    version="2.0.0"
+)
 
-class SkillCategory(BaseModel):
-    category: str
-    skills_list: list[str]
+# --- API Endpoints for the New Architecture ---
 
-class Experience(BaseModel):
-    job_title: str
-    company_name: str
-    start_date: str
-    end_date: str
-    job_context: str
-    missions: list[str]
-    technologies: list[str]
-
-class ExtractedEntities(BaseModel):
-    persons: list[str] = Field(..., example=["Jean Dupont"])
-    locations: list[str] = Field(..., example=["Paris"])
-    emails: list[str] = Field(..., example=["jean.dupont@example.com"])
-    phones: list[str] = Field(..., example=["01 23 45 67 89"])
-    skills: list[SkillCategory] = Field(..., example=[{"category": "Languages", "skills_list": ["Python", "JavaScript"]}])
-    experience: list[Experience] = Field(..., example=[{"job_title": "Software Engineer", "company_name": "Example Corp", "start_date": "Jan 2020", "end_date": "Present", "job_context": "Developing awesome things.", "missions": ["Build feature X"], "technologies": ["Python", "FastAPI"]}])
-
-class AnonymizeRequest(BaseModel):
-    filename: str
-    entities: ExtractedEntities
-    raw_text: str
-
-# The nlp model is no longer needed at the global level.
-nlp = None
-
-app = FastAPI(title="CV Anonymizer API")
-
-# Supabase configuration
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
-
-if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-    print("Warning: Supabase credentials not found. Supabase integration will be disabled.")
-    supabase: Client | None = None
-else:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-@app.get("/")
+@app.get("/", tags=["Status"])
 def read_root():
     """Root endpoint to check if the API is running."""
-    return {"message": "Welcome to the CV Anonymizer API!"}
+    return {"message": "Welcome to the CV Templating API v2.0!"}
 
-@app.get("/converter", response_class=FileResponse)
-async def read_converter_page():
-    """Serves the HTML page for the DOCX to Template converter."""
-    return "templates/converter.html"
-
-@app.get("/status")
-def get_status():
-    """Returns the current status of the server, focusing on the app's resource usage."""
-    process = psutil.Process(os.getpid())
-
-    # Get process-specific memory usage
-    memory_info = process.memory_info()
-    memory_used_mb = memory_info.rss / (1024 ** 2)  # rss is typically the most relevant metric
-
-    # Get overall system disk usage (disk usage is not process-specific)
-    disk_info = psutil.disk_usage('/')
-
-    return {
-        "app_cpu_usage_percent": process.cpu_percent(interval=0.1),
-        "app_memory_usage": {
-            "used_mb": f"{memory_used_mb:.2f} MB"
-        },
-        "system_disk_usage": {
-            "total": f"{disk_info.total / (1024**3):.2f} GB",
-            "used": f"{disk_info.used / (1024**3):.2f} GB",
-            "free": f"{disk_info.free / (1024**3):.2f} GB",
-            "percent": disk_info.percent
-        }
-    }
-
-@app.post("/upload")
-async def upload_cv(file: UploadFile = File(...)):
+@app.post("/templates/create-from-pdf", tags=["Template Creation"])
+async def create_template_from_pdf_endpoint(file: UploadFile = File(...)):
     """
-    Uploads a CV, extracts text, refines it with an LLM, and saves the result.
+    Workflow 1: Creates a new HTML/Jinja2 template from a user's styled PDF.
+
+    This endpoint takes a PDF, uses a vision-capable LLM to convert it into
+    high-fidelity HTML/CSS, and then programmatically prepares it as a reusable
+    Jinja2 template. The template is not stored in this version but returned
+    to the user for inspection.
     """
-    logger.info(f"Received file '{file.filename}' for upload.")
+    logger.info(f"Received file '{file.filename}' for template creation.")
     if file.content_type != "application/pdf":
-        logger.warning(f"Invalid file type '{file.content_type}' received.")
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload a PDF.")
 
     try:
         pdf_bytes = await file.read()
+        pdf_stream = io.BytesIO(pdf_bytes)
 
-        # --- Deduplication Check ---
-        file_hash = hashlib.sha256(pdf_bytes).hexdigest()
-        logger.info(f"Calculated SHA256 hash for '{file.filename}': {file_hash}")
+        # Use the template_builder module to convert the PDF to a templated HTML string
+        html_template_str = create_template_from_pdf(pdf_stream)
 
-        if supabase:
-            try:
-                logger.debug(f"Checking for existing hash in the database...")
-                # .execute() returns a list, so we check if it's empty
-                response = supabase.table("extractions").select("id").eq("file_hash", file_hash).execute()
-                if response.data:
-                    extraction_id = response.data[0]['id']
-                    logger.info(f"Duplicate file detected. Found existing extraction_id: {extraction_id} for hash: {file_hash}")
-                    return {"extraction_id": extraction_id, "detail": "File already processed."}
-            except Exception as e:
-                # It's safer to re-process than to fail the upload if the check fails.
-                logger.error(f"Could not check for existing file hash. Proceeding with processing. Error: {e}")
+        # In a full implementation, we would save this string to a user's account in the DB.
+        # For now, we return it directly for validation.
+        logger.info("Successfully created HTML template from PDF.")
 
-        logger.info("Starting OCR processing...")
-        try:
-            images = convert_from_bytes(pdf_bytes)
-            text = ""
-            for i, img in enumerate(images):
-                page_text = pytesseract.image_to_string(img, lang='fra')
-                text += page_text + "\n"
-                logger.debug(f"Extracted text from page {i+1}.")
-            logger.info("OCR processing completed.")
-        except Exception as ocr_error:
-            logger.error(f"OCR processing failed: {ocr_error}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"OCR processing failed. Ensure Tesseract and Poppler are installed.")
-
-        if not text.strip():
-            logger.warning("No text could be extracted from the PDF.")
-            raise HTTPException(status_code=400, detail="Could not extract any text from the PDF.")
-
-        logger.info("Initial data extraction is now handled by the LLM refiner.")
-        # The initial_extraction dictionary is now created inside the LLM refiner,
-        # making this step pure-LLM.
-        initial_extraction = {} # This is now a placeholder
-
-        # --- LLM Refinement ---
-        # The `refine_extraction_with_llm` function is now expected to handle the full extraction.
-        llm_success, llm_result = refine_extraction_with_llm(text, initial_extraction)
-        if not llm_success:
-            logger.error("LLM refinement failed.")
-            error_detail = "LLM refinement failed. Upstream service may be unavailable."
-            if DEBUG_MODE:
-                error_detail = llm_result
-            raise HTTPException(status_code=502, detail=error_detail)
-
-        refined_entities = llm_result
-
-        final_data_to_save = {"filename": file.filename, "entities": refined_entities, "raw_text": text}
-        logger.info("Successfully prepared final data object.")
-
-        # --- Supabase Integration ---
-        if supabase:
-            safe_filename = re.sub(r'[^a-zA-Z0-9._-]', '_', file.filename)
-            file_path = f"uploads/{uuid.uuid4()}_{safe_filename}"
-            logger.info(f"Uploading file to Supabase at path: {file_path}")
-            try:
-                supabase.storage.from_("cvs").upload(file_path, pdf_bytes, {"content-type": "application/pdf"})
-                logger.info("File uploaded to Supabase Storage.")
-
-                logger.info("Inserting new extraction data into Supabase DB...")
-                db_response = supabase.table("extractions").insert({
-                    "filename": file.filename,
-                    "storage_path": file_path,
-                    "data": final_data_to_save,
-                    "file_hash": file_hash  # Add the hash to the new record
-                }).execute()
-                new_extraction_id = db_response.data[0]['id']
-                logger.info(f"New extraction data saved with ID: {new_extraction_id}")
-
-                return {"extraction_id": new_extraction_id}
-            except Exception as e:
-                logger.error(f"Supabase operation failed: {e}", exc_info=True)
-                raise HTTPException(status_code=500, detail="Failed to save data to backend storage.")
-        else:
-            logger.warning("Supabase is not configured. Skipping database operations.")
-            # In a real scenario, you might want to block this or handle it differently.
-            # For now, we'll return the data without saving, which is not ideal.
-            return {"extraction_id": None, "detail": "Supabase not configured", "data": final_data_to_save}
-
-    except HTTPException:
-        # Re-raise HTTPException to let FastAPI handle it
-        raise
-    except Exception as e:
-        logger.critical(f"An unexpected error occurred during file processing for '{file.filename}': {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="An unexpected error occurred during file processing.")
-
-
-def anonymize_text(text: str, entities: ExtractedEntities) -> str:
-    """Replaces personal information in the text with anonymized placeholders."""
-
-    # Anonymize persons to initials
-    for person in entities.persons:
-        initials = "".join([name[0].upper() for name in person.split()])
-        text = text.replace(person, f"Person ({initials})")
-
-    # Anonymize emails
-    for email in entities.emails:
-        text = text.replace(email, "[EMAIL REDACTED]")
-
-    # Anonymize phones
-    for phone in entities.phones:
-        text = text.replace(phone, "[PHONE REDACTED]")
-
-    # Anonymize locations
-    for location in entities.locations:
-        text = text.replace(location, "[LOCATION REDACTED]")
-
-    return text
-
-
-@app.get("/anonymize/{extraction_id}")
-async def anonymize_cv_by_id(extraction_id: int):
-    """
-    Fetches an extraction by ID, anonymizes it, generates a DOCX file,
-    and returns a secure download link.
-    """
-    logger.info(f"Received request to anonymize extraction ID: {extraction_id}")
-    if not supabase:
-        logger.error("Anonymization request failed: Supabase is not configured.")
-        raise HTTPException(status_code=503, detail="Supabase is not configured. Cannot fetch extraction data.")
-
-    try:
-        logger.info(f"Fetching extraction data for ID: {extraction_id} from Supabase.")
-        response = supabase.table("extractions").select("*").eq("id", extraction_id).single().execute()
-        extraction_data = response.data
-        logger.info(f"Successfully fetched data for extraction ID: {extraction_id}.")
-
-        if not extraction_data:
-            logger.warning(f"Extraction ID: {extraction_id} not found in the database.")
-            raise HTTPException(status_code=404, detail="Extraction not found.")
-
-        # The full extraction_data (which includes the 'data' key) is passed to the generator.
-        logger.info("Generating final CV from template...")
-        doc_io = generate_cv_from_template(extraction_data)
-        logger.info("Templated DOCX document generated successfully.")
-
-        # Use the original filename to create the new anonymized filename
-        original_filename = extraction_data.get('data', {}).get('filename', 'cv.pdf')
-        anonymized_filename = f"anonymized_{original_filename.replace('.pdf', '.docx')}"
-        file_path = f"anonymized_cvs/{uuid.uuid4()}_{anonymized_filename}"
-
-        logger.info(f"Uploading anonymized DOCX to Supabase at path: {file_path}")
-        supabase.storage.from_("cvs").upload(
-            file_path,
-            doc_io.getvalue(),
-            {"content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
-        )
-        logger.info("Anonymized file uploaded to Supabase storage.")
-
-        logger.info("Creating signed download URL...")
-        # 24-hour expiry
-        download_url_response = supabase.storage.from_("cvs").create_signed_url(file_path, 60 * 60 * 24)
-        logger.info("Signed URL created successfully.")
-
-        return {"download_url": download_url_response['signedURL']}
-
-    except HTTPException:
-        # Re-raise HTTPException to let FastAPI handle it
-        raise
-    except Exception as e:
-        logger.critical(f"An unexpected error occurred during anonymization for ID {extraction_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred during anonymization.")
-
-
-@app.post("/convert-to-template")
-async def convert_cv_to_template_endpoint(file: UploadFile = File(...)):
-    """
-    Uploads a .docx CV and orchestrates a multi-stage, self-correcting
-    pipeline to convert it into a robust Jinja2 template.
-    """
-    logger.info(f"Received file '{file.filename}' for template conversion.")
-    if file.content_type != "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        logger.warning(f"Invalid file type '{file.content_type}' received.")
-        return JSONResponse(status_code=400, content={"error": "Invalid file type. Please upload a valid .docx file."})
-
-    MAX_RETRIES = 3
-    feedback_issues = None
-
-    try:
-        docx_bytes = await file.read()
-
-        for attempt in range(MAX_RETRIES):
-            logger.info(f"Starting conversion attempt {attempt + 1}/{MAX_RETRIES}...")
-            # Use a new stream for each attempt
-            docx_stream = io.BytesIO(docx_bytes)
-
-            try:
-                # Stages 1 & 2: Semantic mapping and deterministic annotation
-                templated_stream = convert_docx_to_template(
-                    docx_stream,
-                    use_llm=True,
-                    feedback_issues=feedback_issues
-                )
-
-                # Stage 3: LLM QA Review - this will raise QAValidationError on failure
-                validate_template_with_llm(templated_stream)
-
-                # --- Success Case ---
-                # This code is only reached if validate_template_with_llm does NOT raise an exception.
-                logger.info(f"Pipeline successful on attempt {attempt + 1}! Template passed all validation checks.")
-                templated_stream.seek(0)
-
-                template_filename = file.filename.replace('.docx', '_template.docx')
-                headers = {'Content-Disposition': f'attachment; filename="{template_filename}"'}
-                return StreamingResponse(
-                    templated_stream,
-                    media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    headers=headers
-                )
-
-            except QAValidationError as qa_error:
-                logger.warning(f"Attempt {attempt + 1} failed QA. Storing feedback for next attempt. Issues: {qa_error.issues}")
-                feedback_issues = qa_error.issues # Feed issues back into the next loop
-                # The loop will now naturally continue to the next iteration
-
-        # --- Failure Case ---
-        # This code is only reached if the loop completes without a successful return.
-        logger.error(f"Failed to produce a valid template after {MAX_RETRIES} attempts.")
-        return JSONResponse(
-            status_code=400,
-            content={
-                "error": "The document could not be converted into a high-quality template after multiple refinement attempts.",
-                "final_issues": feedback_issues,
-            },
+        return FileResponse(
+            io.BytesIO(html_template_str.encode('utf-8')),
+            media_type="text/html",
+            filename=f"generated_template_for_{file.filename.replace('.pdf', '.html')}"
         )
 
-    except ValueError as ve:
-        # Catches fatal errors from the pipeline that are not QA related
-        logger.error(f"Fatal value error during template conversion: {ve}", exc_info=False)
-        return JSONResponse(status_code=400, content={"error": str(ve)})
+    except (ValueError, HTTPException) as e:
+        logger.error(f"Template creation failed: {e}", exc_info=DEBUG_MODE)
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.critical(f"An unexpected fatal error occurred for '{file.filename}': {e}", exc_info=True)
-        return JSONResponse(status_code=500, content={"error": "An unexpected server error occurred."})
+        logger.critical(f"An unexpected error occurred during template creation: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected server error occurred.")
+
+
+@app.post("/cv/anonymize", tags=["CV Anonymization"])
+async def anonymize_cv_with_template(
+    template_name: str = Form("professional_template.html"),
+    cv_file: UploadFile = File(...)
+):
+    """
+    Workflow 2: Anonymizes a new CV using a specified HTML template.
+
+    This endpoint extracts structured data from the uploaded CV, injects it
+    into the specified HTML template, and returns the final, rendered PDF.
+    """
+    logger.info(f"Received CV '{cv_file.filename}' for anonymization with template '{template_name}'.")
+
+    # Supported content types for CVs
+    supported_types = [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "image/png",
+        "image/jpeg"
+    ]
+    if cv_file.content_type not in supported_types:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type '{cv_file.content_type}'.")
+
+    try:
+        cv_bytes = await cv_file.read()
+        cv_stream = io.BytesIO(cv_bytes)
+
+        # 1. Extract structured JSON from the CV
+        json_data = extract_json_from_cv(cv_stream, cv_file.content_type)
+
+        # 2. Render the specified HTML template with the extracted data into a PDF
+        pdf_stream = render_html_to_pdf(template_name, json_data)
+
+        # 3. Return the final PDF
+        anonymized_filename = f"anonymized_{os.path.splitext(cv_file.filename)[0]}.pdf"
+        headers = {'Content-Disposition': f'attachment; filename="{anonymized_filename}"'}
+
+        return StreamingResponse(pdf_stream, media_type="application/pdf", headers=headers)
+
+    except (ValueError, HTTPException) as e:
+        logger.error(f"CV anonymization failed: {e}", exc_info=DEBUG_MODE)
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.critical(f"An unexpected error occurred during CV anonymization: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected server error occurred.")

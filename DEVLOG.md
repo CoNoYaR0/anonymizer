@@ -26,3 +26,11 @@ The goal of this project is to create a backend service that can take a CV in PD
 *   **Testing:** A `pytest` suite was created from scratch. The final version uses `monkeypatch` to mock all external LLM calls, allowing for fast, deterministic, and cost-effective testing of the entire pipeline.
 
 *   **Git Hygiene:** Resolved a merge conflict caused by a cached `__pycache__` file and updated `.gitignore` to prevent future issues.
+
+### Phase 3: Architectural Migration to "PDF/HTML-First"
+*   **Date:** 2025-08-05
+*   **Objective:** To address the fundamental fragility and high cost of the `.docx`-based templating engine, a strategic decision was made to migrate to a more robust, web-native architecture.
+*   **New Architecture:**
+    *   **Workflow 1 (Template Creation):** A user's styled PDF will be converted by a vision-capable LLM into high-fidelity HTML/CSS, which will then be turned into a reusable Jinja2 template.
+    *   **Workflow 2 (CV Anonymization):** New CVs will be processed to extract a canonical JSON object, which will then be rendered into the user's HTML template and delivered as a clean PDF or HTML string.
+*   **Reasoning:** This approach eliminates the error-prone `.docx` format from the output pipeline, gives us full programmatic control over templating, reduces LLM costs by removing the complex QA/refinement loop, and produces a more professional and reliable end product. This marks the final and most robust iteration of the system.
