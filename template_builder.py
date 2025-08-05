@@ -47,14 +47,55 @@ def _pdf_to_html(file_stream: IO[bytes]) -> str:
         logger.debug(f"Prepared page {i+1} for LLM vision.")
 
     system_prompt = """
-You are an expert web developer and digital archivist. Your task is to look at a sequence of images from a CV and perfectly replicate its combined layout, styling, and content as a single, clean HTML file with inline CSS. Your goal is maximum fidelity.
+You are a senior digital archivist and elite HTML/CSS engineer.
 
-**CRITICAL RULES:**
-1.  **PIXEL-PERFECT REPLICATION:** The output MUST be a visually identical, pixel-perfect recreation of the source images. Do NOT simplify, reinterpret, or deviate from the original design.
-2.  **INLINE CSS:** You MUST use inline CSS for all styling (`style="..."`).
-3.  **COMBINE IMAGES:** Combine the content from all images into a single, coherent HTML document.
-4.  **CLEAN CODE:** The output MUST be only a single, complete HTML string. Do not include any commentary, explanation, or markdown fences.
-5.  **PRECISION:** Replicate text content, font choices, colors, spacing, and layout with extreme precision.
+Your mission is to **reconstruct, with extreme visual precision**, a CV from one or more input images (scanned from PDF), by producing a **pixel-perfect, full HTML document** with **inline CSS**.
+
+---
+
+🚨 YOUR OUTPUT MUST REPLICATE THE DESIGN **EXACTLY**.
+This is not a markdown conversion, not an interpretation, and not a simplification. You are recreating a UI down to the pixel and color.
+
+---
+
+🔒 STRICT REQUIREMENTS (NO EXCEPTIONS):
+
+1. 🎯 **PIXEL-PERFECT REPLICATION**:
+   - Every layout element (spacing, margin, padding, line height, indentation, positioning) must match the image exactly.
+   - Maintain **column structure**, **grid alignment**, and **relative spacing** as shown visually.
+
+2. 🎨 **EXACT COLORS, FONTS, AND STYLES**:
+   - Colors must match **exactly** (e.g., if a bullet point is `#ff3300`, use that exact hex).
+   - Preserve **font families**, **sizes**, **weights**, **line spacing**, and **text alignment**.
+   - If a heading is bold and orange in the source, it must be bold and `#ff3300` in HTML.
+   - DO NOT substitute approximate styles.
+
+3. ➖ **RESPECT ALL DESIGN ELEMENTS**:
+   - Horizontal or vertical lines, separators, shapes, spacers, and icons must be included using `<hr>`, `<div>`, or styled elements.
+   - Alignments, indentation, bullet styles, and spacing between blocks must be preserved.
+
+4. 🧱 **INLINE CSS ONLY**:
+   - All styling must be done via `style="..."` inline attributes.
+   - Do not use `<style>`, `<link>`, or external files.
+
+5. 📦 **MERGE ALL IMAGES INTO ONE PAGE**:
+   - If there are multiple input images, concatenate them into a **single, flowing HTML page**, in the order shown.
+
+6. ✍️ **PRESERVE TEXT AS-IS**:
+   - Do not reword, guess, translate, or reinterpret any part of the text.
+   - If a word is unreadable, write `[UNCLEAR]`.
+
+7. 🧼 **OUTPUT ONLY CLEAN, FINAL HTML**:
+   - Do not wrap in markdown fences
+   - Do not include commentary or meta text
+   - No broken or unfinished tags
+
+---
+
+📌 IMPORTANT: Your output will be parsed and processed programmatically.
+Even minor style deviations (wrong color, spacing, font weight) will break our workflow.
+This is not design inspiration — this is **digital reconstruction with engineering-grade fidelity**.
+
 """
     user_content = [
         {
@@ -72,7 +113,7 @@ You are an expert web developer and digital archivist. Your task is to look at a
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}
             ],
-            temperature=0.0,
+            temperature=0.2,
         )
         html_content = response.choices[0].message.content
         # Clean up markdown fences if the LLM adds them
@@ -123,20 +164,48 @@ def create_template_from_pdf(file_stream: IO[bytes]) -> str:
     client = OpenAI()
 
     system_prompt = """
-You are a Liquid templating expert. Your task is to take a raw HTML file representing a CV and intelligently replace the specific personal details (names, companies, dates, skills, etc.) with the correct Liquid placeholders.
+You are an expert in Liquid templating.
 
-**Rules:**
-1.  **PERFECT SYNTAX:** Your generated Liquid code MUST be syntactically flawless. Every `{% for ... %}` must have a matching `{% endfor %}`.
-2.  **NO HTML CHANGES:** Do NOT change the HTML structure or CSS styling in any way.
-3.  **STANDARD PLACEHOLDERS:**
-    -   Names: `{{ name }}`
-    -   Job Titles: `{{ title }}`
-    -   Contact Info: `{{ email }}`, `{{ phone }}`, `{{ location }}`
-4.  **LOOPS:**
-    -   Work Experience/Education: Use `{% for job in experiences %}` or `{% for edu in educations %}`.
-    -   Inside loops, use correct variables: `{{ job.title }}`, `{{ edu.institution }}`.
-    -   For lists of skills (dictionaries), use a loop like this: `{% for skill in skills %}{{ skill[0] }}: {{ skill[1] | join: ', ' }}{% endfor %}`.
-5.  **OUTPUT:** Your output MUST be only the final, templated HTML code. Do not add commentary.
+Your task is to take a fully rendered, static HTML CV and **intelligently replace static personal content** with dynamic Liquid template tags.
+
+🎯 Your goal is to inject Liquid placeholders in a way that makes the file reusable as a dynamic template, without breaking the structure or formatting.
+
+🔒 RULES:
+
+1. **DO NOT MODIFY HTML STRUCTURE**
+   Preserve all HTML tags, inline styles, and layout exactly as they are.
+
+2. **INJECT ONLY VALID LIQUID**
+   All Liquid tags must be 100% syntactically valid.
+   - Every `{% for ... %}` must be matched with `{% endfor %}`
+   - All variable names must follow the given standard
+
+3. **USE THESE STANDARD VARIABLES**:
+   - Personal info:
+     - `{{ name }}`, `{{ title }}`, `{{ years_experience }}`
+     - `{{ email }}`, `{{ phone }}`, `{{ location }}`
+   - Work experience:
+     - `{% for job in experiences %}`
+     - `{{ job.title }}`, `{{ job.company }}`, `{{ job.start_date }}`, `{{ job.end_date }}`, `{{ job.location }}`
+     - `{{ job.context }}`, `{{ job.technical_environment }}`
+     - Looped sections: `job.missions`, `job.results`, `job.security`, `job.monitoring`, etc.
+   - Education:
+     - `{% for edu in educations %}`
+     - `{{ edu.date }}`, `{{ edu.degree }}`, `{{ edu.institution }}`
+   - Skills:
+     - `{% for skill in skills %}`
+     - `{{ skill[0] }}: {{ skill[1] | join: ', ' }}`
+
+4. **FILL ALL DYNAMIC FIELDS**
+   Ensure that every personal/variable field is replaced with a Liquid tag.
+   If unsure, leave static content.
+
+5. **NEVER OUTPUT EXPLANATIONS**
+   Only output the final, fully templated HTML. No markdown, no comments, no prefix/suffix.
+
+6. **IF RETRYING AFTER ERROR**, use the additional instruction:
+   - `IMPORTANT: Your previous attempt failed with a Liquid syntax error. You MUST fix this specific issue: [error_message_here]`
+
 """
     user_html_prompt = f"Here is the raw HTML to be templated:\n\n```html\n{raw_html}\n```"
 
@@ -149,8 +218,7 @@ You are a Liquid templating expert. Your task is to take a raw HTML file represe
             feedback_prompt = (
                 "\n\n---\n"
                 "**IMPORTANT:** Your previous attempt failed with a Liquid syntax error. "
-                "You MUST fix this specific issue. Do not repeat the mistake.\n"
-                f"**Error Message:** `{last_error}`\n"
+                f"You MUST fix this specific issue: {last_error}\n"
                 "---"
             )
 
