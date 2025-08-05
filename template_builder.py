@@ -91,20 +91,49 @@ You are an expert web developer. Your task is to look at a sequence of images fr
 def create_template_from_pdf(file_stream: IO[bytes]) -> str:
     """
     Orchestrates the creation of a Jinja2 HTML template from a PDF file.
-
-    Note: This is a simplified placeholder. A real implementation would require
-    a much more sophisticated second LLM call or complex regex to identify and
-    replace specific text with Jinja2 placeholders while preserving the surrounding HTML.
-    For this version, we will just return the raw HTML as a proof of concept.
+    This is a two-step process:
+    1. Convert the PDF's visual layout to raw HTML.
+    2. Use a second LLM call to inject Jinja2 placeholders into the HTML.
     """
     logger.info("[template_builder.create_template_from_pdf] Orchestrating template creation.")
-    html_content = _pdf_to_html(file_stream)
 
-    # TODO: Implement sophisticated text-to-Jinja2 replacement logic here.
-    # For example, find "John Doe" in the HTML and replace it with "{{ name }}".
-    # This is a non-trivial task that requires careful parsing to avoid breaking HTML tags.
-    logger.warning("Template creation is in proof-of-concept stage. Placeholder injection is not yet implemented.")
+    # Step 1: Convert PDF to raw HTML
+    raw_html = _pdf_to_html(file_stream)
 
-    templated_html = html_content # Placeholder for now
+    # Step 2: Inject Jinja2 placeholders using a second LLM call
+    logger.info("Sending raw HTML to LLM for Jinja2 placeholder injection.")
+    client = OpenAI()
+    system_prompt = """
+You are a Jinja2 templating expert. Your task is to take a raw HTML file representing a CV and intelligently replace the specific personal details (names, companies, dates, skills, etc.) with the correct Jinja2 placeholders.
 
-    return templated_html
+**Rules:**
+1.  **DO NOT** change the HTML structure or CSS styling in any way.
+2.  Replace names with `{{ name }}`.
+3.  Replace job titles with `{{ title }}`.
+4.  Replace contact info (email, phone, location) with `{{ email }}`, `{{ phone }}`, `{{ location }}`.
+5.  For repeating sections like work experience or education, you MUST use `{% for ... %}` loops. For example: `{% for job in experiences %}` or `{% for edu in educations %}`.
+6.  Inside loops, use the correct variable names, e.g., `{{ job.title }}`, `{{ job.company }}`, `{{ edu.title }}`.
+7.  For lists of skills, which are often grouped by category, use a dictionary loop: `{% for category, tools in skills.items() %}`.
+8.  Your output MUST be only the final, templated HTML code. Do not add commentary.
+"""
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o", # Use a powerful model for this complex task
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Here is the raw HTML to be templated:\n\n```html\n{raw_html}\n```"},
+            ],
+            temperature=0.0,
+        )
+        templated_html = response.choices[0].message.content
+        # Clean up markdown fences
+        if templated_html.startswith("```html"):
+            templated_html = templated_html[7:]
+        if templated_html.endswith("```"):
+            templated_html = templated_html[:-3]
+
+        logger.info("Successfully injected Jinja2 placeholders into HTML.")
+        return templated_html.strip()
+    except Exception as e:
+        logger.error(f"LLM Jinja2 injection failed: {e}", exc_info=True)
+        raise ValueError("Failed to inject Jinja2 placeholders into the HTML.")
