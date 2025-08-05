@@ -12,7 +12,17 @@ logger = logging.getLogger(__name__)
 
 def _extract_text_from_docx(docx_stream: io.BytesIO) -> str:
     """Extracts all text from a .docx file stream."""
-    doc = docx.Document(docx_stream)
+    try:
+        doc = docx.Document(docx_stream)
+    except KeyError as e:
+        # This specific KeyError from python-docx indicates a malformed package.
+        # It's often because the file is not a true .docx file (e.g., a .doc renamed).
+        logger.error(f"Failed to parse DOCX file, it may be corrupted or not a valid .docx format. Error: {e}")
+        raise ValueError(
+            "The file is not a valid .docx file. It may be corrupted, an older format (.doc), "
+            "or a different file type with a .docx extension."
+        )
+
     full_text = "\n".join([p.text for p in doc.paragraphs])
     for table in doc.tables:
         for row in table.rows:
