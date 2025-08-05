@@ -3,6 +3,7 @@ import logging
 import json
 import docx
 from openai import OpenAI, RateLimitError, APIError
+from docx_to_template_converter import QAValidationError
 
 # Configure logger
 logger = logging.getLogger(__name__)
