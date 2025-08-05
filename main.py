@@ -16,12 +16,8 @@ from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 import pytesseract
 from pdf2image import convert_from_bytes
-import spacy
 from supabase import create_client, Client
 import io
-from PIL import Image
-import docx
-from docx.shared import Inches
 import psutil
 from llm_refiner import refine_extraction_with_llm
 from template_generator import generate_cv_from_template
@@ -62,15 +58,8 @@ class AnonymizeRequest(BaseModel):
     entities: ExtractedEntities
     raw_text: str
 
-# Load spaCy model
-try:
-    nlp = spacy.load("fr_core_news_lg")
-except OSError:
-    print("Downloading spaCy model 'fr_core_news_lg'...")
-    from spacy.cli import download
-    download("fr_core_news_lg")
-    nlp = spacy.load("fr_core_news_lg")
-
+# The nlp model is no longer needed at the global level.
+nlp = None
 
 app = FastAPI(title="CV Anonymizer API")
 
@@ -166,17 +155,13 @@ async def upload_cv(file: UploadFile = File(...)):
             logger.warning("No text could be extracted from the PDF.")
             raise HTTPException(status_code=400, detail="Could not extract any text from the PDF.")
 
-        logger.info("Starting initial data extraction with spaCy...")
-        doc = nlp(text)
-        persons = list(set([ent.text for ent in doc.ents if ent.label_ == "PER"]))
-        locations = list(set([ent.text for ent in doc.ents if ent.label_ == "LOC"]))
-        # Improved regex for emails: handles more complex names and common TLDs.
-        emails = list(set(re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', text)))
-        phones = list(set(re.findall(r'(\d{2}[-\.\s]?){4}\d{2}', text)))
-        initial_extraction = {"persons": persons, "locations": locations, "emails": emails, "phones": phones, "skills": [], "experience": []}
-        logger.info("Initial data extraction completed.")
+        logger.info("Initial data extraction is now handled by the LLM refiner.")
+        # The initial_extraction dictionary is now created inside the LLM refiner,
+        # making this step pure-LLM.
+        initial_extraction = {} # This is now a placeholder
 
         # --- LLM Refinement ---
+        # The `refine_extraction_with_llm` function is now expected to handle the full extraction.
         llm_success, llm_result = refine_extraction_with_llm(text, initial_extraction)
         if not llm_success:
             logger.error("LLM refinement failed.")
@@ -330,7 +315,6 @@ async def convert_cv_to_template_endpoint(file: UploadFile = File(...)):
                 # Stages 1 & 2: Semantic mapping and deterministic annotation
                 templated_stream = convert_docx_to_template(
                     docx_stream,
-                    nlp,
                     use_llm=True,
                     feedback_issues=feedback_issues
                 )

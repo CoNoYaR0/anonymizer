@@ -5,7 +5,6 @@ import logging
 import json
 import os
 from openai import OpenAI, RateLimitError, APIError
-from spacy.tokens import Doc
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -320,7 +319,6 @@ def stage2_apply_annotations(docx_stream: io.BytesIO, semantic_map: dict) -> io.
 
 def convert_docx_to_template(
     docx_stream: io.BytesIO,
-    nlp_model: 'spacy.lang.en.English',
     use_llm: bool = True,
     feedback_issues: list | None = None
 ) -> io.BytesIO:
