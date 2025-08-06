@@ -7,12 +7,12 @@ load_dotenv(find_dotenv())
 
 import os
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
+from fastapi.responses import StreamingResponse
 import io
 
 # Import the new, modularized components
 from content_extractor import extract_json_from_cv
-from template_builder import create_template_from_pdf
+from template_builder import create_template_from_docx # Updated import
 from renderer import render_html_to_pdf
 
 # Get a logger for the current module
@@ -24,8 +24,8 @@ DEBUG_MODE = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 # Initialize FastAPI app
 app = FastAPI(
     title="CV Templating API",
-    description="A robust, PDF/HTML-first API for creating and using professional CV templates.",
-    version="2.0.0"
+    description="A robust, DOCX-first API for creating and using professional CV templates.",
+    version="3.0.0"
 )
 
 # --- API Endpoints for the New Architecture ---
@@ -33,34 +33,33 @@ app = FastAPI(
 @app.get("/", tags=["Status"])
 def read_root():
     """Root endpoint to check if the API is running."""
-    return {"message": "Welcome to the CV Templating API v2.0!"}
+    return {"message": "Welcome to the CV Templating API v3.0!"}
 
-@app.post("/templates/create-from-pdf", tags=["Template Creation"])
-async def create_template_from_pdf_endpoint(file: UploadFile = File(...)):
+@app.post("/templates/create-from-docx", tags=["Template Creation"])
+async def create_template_from_docx_endpoint(file: UploadFile = File(...)):
     """
-    Workflow 1: Creates a new HTML/Jinja2 template from a user's styled PDF.
+    Workflow 1: Creates a new HTML/Liquid template from a user's styled DOCX.
 
-    This endpoint takes a PDF, uses a vision-capable LLM to convert it into
-    high-fidelity HTML/CSS, and then programmatically prepares it as a reusable
-    Jinja2 template. The template is not stored in this version but returned
-    to the user for inspection.
+    This endpoint takes a DOCX file, uses the Convertio API to convert it into
+    high-fidelity HTML, and then uses an LLM to prepare it as a reusable
+    Liquid template.
     """
-    logger.info(f"[/templates/create-from-pdf] Received file '{file.filename}' for template creation.")
-    if file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a PDF.")
+    logger.info(f"[/templates/create-from-docx] Received file '{file.filename}' for template creation.")
+
+    docx_mimetype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    if file.content_type != docx_mimetype:
+        raise HTTPException(status_code=400, detail=f"Invalid file type. Please upload a DOCX file. Received: {file.content_type}")
 
     try:
-        pdf_bytes = await file.read()
-        pdf_stream = io.BytesIO(pdf_bytes)
+        docx_bytes = await file.read()
+        docx_stream = io.BytesIO(docx_bytes)
 
-        # Use the template_builder module to convert the PDF to a templated HTML string
-        html_template_str = create_template_from_pdf(pdf_stream)
+        # Use the template_builder module to convert the DOCX to a templated HTML string
+        html_template_str = create_template_from_docx(docx_stream, file.filename)
 
-        # In a full implementation, we would save this string to a user's account in the DB.
-        # For now, we return it directly for validation.
-        logger.info("Successfully created HTML template from PDF.")
+        logger.info("Successfully created HTML template from DOCX.")
 
-        headers = {'Content-Disposition': f'attachment; filename="generated_template_for_{file.filename.replace(".pdf", ".html")}"'}
+        headers = {'Content-Disposition': f'attachment; filename="generated_template_for_{file.filename.replace(".docx", ".html")}"'}
         return StreamingResponse(
             io.BytesIO(html_template_str.encode('utf-8')),
             media_type="text/html",
