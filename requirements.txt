@@ -12,3 +12,4 @@ openai
 weasyprint
 liquidpy
 python-docx
+beautifulsoup4
