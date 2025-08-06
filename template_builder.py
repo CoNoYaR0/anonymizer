@@ -8,7 +8,7 @@ import hashlib
 from typing import IO, Optional
 import httpx
 from openai import OpenAI
-from liquid import Liquid, parse
+from liquid import Liquid
 from bs4 import BeautifulSoup
 
 # --- Configuration ---
@@ -269,7 +269,7 @@ def _validate_liquid_template(template_string: str):
     logger.debug("Entering _validate_liquid_template")
     try:
         logger.info("Validating final Liquid template syntax.")
-        parse(template_string)
+        Liquid(template_string)
         logger.info("Liquid template syntax is valid.")
     except Exception as e:
         logger.error(f"Liquid template validation failed: {e}", exc_info=True)
