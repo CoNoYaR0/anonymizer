@@ -114,3 +114,80 @@ def test_template_creation_pipeline_from_docx_efficient(mock_openai, mock_beauti
     # Verify final output is correctly assembled
     expected_html = "<html><body><p>{{ name }}</p><p>{{ title }}</p></body></html>"
     assert final_template == expected_html
+
+
+# --- Tests for Caching Logic ---
+
+@patch('template_builder._get_cached_html', return_value=None)
+@patch('template_builder._cache_html')
+@patch('template_builder._start_conversion', return_value='test_conversion_id')
+@patch('template_builder._poll_conversion_status', return_value='http://fake.url/output.html')
+@patch('template_builder._download_html_content', return_value='<html><body><p>Jane Doe</p></body></html>')
+@patch('template_builder._get_replacement_map_from_llm', return_value={'Jane Doe': '{{ name }}'})
+def test_template_creation_with_cache_miss(
+    mock_get_map, mock_download, mock_poll, mock_start, mock_cache_html, mock_get_cached_html
+):
+    """
+    Tests the template creation workflow when the item is NOT in the cache.
+    It should call the full conversion pipeline and then cache the result.
+    """
+    # Arrange
+    docx_stream = io.BytesIO(b"new dummy docx content")
+    filename = "new_test.docx"
+    file_hash = "a_mock_hash_would_be_here" # In a real test, we might calculate this
+
+    with patch('template_builder._get_file_hash', return_value=file_hash):
+        # Act
+        final_template = create_template_from_docx(docx_stream, filename)
+
+        # Assert
+        # 1. Check if cache was consulted
+        mock_get_cached_html.assert_called_once_with(file_hash)
+
+        # 2. Check if the conversion process was triggered
+        mock_start.assert_called_once()
+        mock_poll.assert_called_once_with('test_conversion_id')
+        mock_download.assert_called_once_with('http://fake.url/output.html')
+
+        # 3. Check if the result was cached
+        mock_cache_html.assert_called_once_with(file_hash, '<html><body><p>Jane Doe</p></body></html>')
+
+        # 4. Check the final output
+        assert final_template == "<html><body><p>{{ name }}</p></body></html>"
+
+
+@patch('template_builder._get_cached_html', return_value='<html><body><p>Cached Content</p></body></html>')
+@patch('template_builder._cache_html')
+@patch('template_builder._start_conversion')
+@patch('template_builder._get_replacement_map_from_llm', return_value={'Cached Content': '{{ name }}'})
+def test_template_creation_with_cache_hit(
+    mock_get_map, mock_start, mock_cache_html, mock_get_cached_html
+):
+    """
+    Tests the template creation workflow when the item IS in the cache.
+    It should NOT call the conversion pipeline and should use the cached HTML.
+    """
+    # Arrange
+    docx_stream = io.BytesIO(b"cached dummy docx content")
+    filename = "cached_test.docx"
+    file_hash = "a_cached_hash"
+
+    with patch('template_builder._get_file_hash', return_value=file_hash):
+        # Act
+        final_template = create_template_from_docx(docx_stream, filename)
+
+        # Assert
+        # 1. Check if cache was consulted
+        mock_get_cached_html.assert_called_once_with(file_hash)
+
+        # 2. Check that the conversion process was SKIPPED
+        mock_start.assert_not_called()
+
+        # 3. Check that the cache write was SKIPPED
+        mock_cache_html.assert_not_called()
+
+        # 4. Check that the LLM was still called with the cached content
+        mock_get_map.assert_called_once_with('<html><body><p>Cached Content</p></body></html>')
+
+        # 5. Check the final output
+        assert final_template == "<html><body><p>{{ name }}</p></body></html>"

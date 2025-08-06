@@ -4,7 +4,8 @@ import logging
 import time
 import base64
 import json
-from typing import IO
+import hashlib
+from typing import IO, Optional
 import httpx
 from openai import OpenAI
 from liquid import Liquid
@@ -14,6 +15,53 @@ from bs4 import BeautifulSoup
 logger = logging.getLogger(__name__)
 CONVERTIO_API_KEY = os.getenv("CONVERTIO_API_KEY", "b1ba2b0069023e1b292f3936d5c62197")
 CONVERTIO_API_URL = "https://api.convertio.co/convert"
+
+# --- Database and Caching Functions (Mockable) ---
+
+def _get_file_hash(file_stream: IO[bytes]) -> str:
+    """Calculates the SHA-256 hash of a file stream."""
+    hash_sha256 = hashlib.sha256()
+    # Reset stream position to the beginning
+    file_stream.seek(0)
+    # Read file in chunks to handle large files
+    for chunk in iter(lambda: file_stream.read(4096), b""):
+        hash_sha256.update(chunk)
+    # Reset stream position again for subsequent operations
+    file_stream.seek(0)
+    return hash_sha256.hexdigest()
+
+def _get_cached_html(file_hash: str) -> Optional[str]:
+    """
+    Retrieves cached HTML content from the database.
+    This is a placeholder for actual database logic.
+    In a real application, this would query the `html_conversion_cache` table.
+    """
+    # This would be a database call, e.g.,
+    # from db import get_connection
+    # with get_connection() as conn:
+    #     with conn.cursor() as cur:
+    #         cur.execute("SELECT html_content FROM html_conversion_cache WHERE file_hash = %s", (file_hash,))
+    #         result = cur.fetchone()
+    #         return result[0] if result else None
+    logger.warning("Database lookup is mocked. This is not a production implementation.")
+    return None # Simulate cache miss for now
+
+def _cache_html(file_hash: str, html_content: str):
+    """
+    Saves new HTML content to the database cache.
+    This is a placeholder for actual database logic.
+    """
+    # This would be a database call, e.g.,
+    # from db import get_connection
+    # with get_connection() as conn:
+    #     with conn.cursor() as cur:
+    #         cur.execute(
+    #             "INSERT INTO html_conversion_cache (file_hash, html_content) VALUES (%s, %s)",
+    #             (file_hash, html_content)
+    #         )
+    #         conn.commit()
+    logger.warning("Database insert is mocked. This is not a production implementation.")
+    pass # Simulate cache write for now
 
 # --- Private Helper Functions: Convertio Workflow ---
 
@@ -147,19 +195,33 @@ def _apply_replacements_to_html(html_content: str, replacement_map: dict) -> str
 def create_template_from_docx(file_stream: IO[bytes], filename: str) -> str:
     """
     Orchestrates the creation of a Liquid HTML template from a DOCX file.
-    This process is optimized to avoid LLM token limits and improve reliability.
+    This process is optimized with a caching layer to avoid redundant API calls.
     """
     logger.info(f"[create_template_from_docx] Orchestrating template creation for '{filename}'.")
 
-    # Step 1: Convert DOCX to raw HTML using Convertio
-    conversion_id = _start_conversion(file_stream, filename)
-    html_url = _poll_conversion_status(conversion_id)
-    raw_html = _download_html_content(html_url)
+    # Step 1: Calculate the file's hash and check the cache
+    file_hash = _get_file_hash(file_stream)
+    logger.info(f"Calculated SHA-256 hash for '{filename}': {file_hash}")
 
-    # Step 2: Get a replacement map from the LLM
+    raw_html = _get_cached_html(file_hash)
+
+    if raw_html:
+        logger.info(f"Cache hit for hash '{file_hash}'. Skipping Convertio.")
+    else:
+        logger.info(f"Cache miss for hash '{file_hash}'. Proceeding with Convertio conversion.")
+        # Step 2: If not cached, convert DOCX to raw HTML using Convertio
+        conversion_id = _start_conversion(file_stream, filename)
+        html_url = _poll_conversion_status(conversion_id)
+        raw_html = _download_html_content(html_url)
+
+        # Step 3: Cache the newly converted HTML
+        _cache_html(file_hash, raw_html)
+        logger.info(f"Successfully cached new HTML for hash '{file_hash}'.")
+
+    # Step 4: Get a replacement map from the LLM
     replacement_map = _get_replacement_map_from_llm(raw_html)
 
-    # Step 3: Apply the replacements to the original HTML
+    # Step 5: Apply the replacements to the original HTML
     templated_html = _apply_replacements_to_html(raw_html, replacement_map)
 
     return templated_html
