@@ -8,7 +8,7 @@ import hashlib
 from typing import IO, Optional
 import httpx
 from openai import OpenAI
-from liquid import Liquid
+from liquid import Liquid, parse
 from bs4 import BeautifulSoup
 
 # --- Configuration ---
@@ -20,6 +20,7 @@ CONVERTIO_API_URL = "https://api.convertio.co/convert"
 
 def _get_file_hash(file_stream: IO[bytes]) -> str:
     """Calculates the SHA-256 hash of a file stream."""
+    logger.debug("Entering _get_file_hash")
     hash_sha256 = hashlib.sha256()
     # Reset stream position to the beginning
     file_stream.seek(0)
@@ -28,7 +29,9 @@ def _get_file_hash(file_stream: IO[bytes]) -> str:
         hash_sha256.update(chunk)
     # Reset stream position again for subsequent operations
     file_stream.seek(0)
-    return hash_sha256.hexdigest()
+    file_hash = hash_sha256.hexdigest()
+    logger.debug(f"Exiting _get_file_hash with hash: {file_hash}")
+    return file_hash
 
 def _get_cached_html(file_hash: str) -> Optional[str]:
     """
@@ -36,6 +39,7 @@ def _get_cached_html(file_hash: str) -> Optional[str]:
     This is a placeholder for actual database logic.
     In a real application, this would query the `html_conversion_cache` table.
     """
+    logger.debug(f"Entering _get_cached_html with hash: {file_hash}")
     # This would be a database call, e.g.,
     # from db import get_connection
     # with get_connection() as conn:
@@ -44,6 +48,7 @@ def _get_cached_html(file_hash: str) -> Optional[str]:
     #         result = cur.fetchone()
     #         return result[0] if result else None
     logger.warning("Database lookup is mocked. This is not a production implementation.")
+    logger.debug("Exiting _get_cached_html with None")
     return None # Simulate cache miss for now
 
 def _cache_html(file_hash: str, html_content: str):
@@ -51,6 +56,7 @@ def _cache_html(file_hash: str, html_content: str):
     Saves new HTML content to the database cache.
     This is a placeholder for actual database logic.
     """
+    logger.debug(f"Entering _cache_html with hash: {file_hash}")
     # This would be a database call, e.g.,
     # from db import get_connection
     # with get_connection() as conn:
@@ -61,12 +67,14 @@ def _cache_html(file_hash: str, html_content: str):
     #         )
     #         conn.commit()
     logger.warning("Database insert is mocked. This is not a production implementation.")
+    logger.debug("Exiting _cache_html")
     pass # Simulate cache write for now
 
 # --- Private Helper Functions: Convertio Workflow ---
 
 def _start_conversion(file_stream: IO[bytes], filename: str) -> str:
     """Starts a new conversion on the Convertio API."""
+    logger.debug(f"Entering _start_conversion with filename: {filename}")
     if not CONVERTIO_API_KEY:
         raise ValueError("CONVERTIO_API_KEY environment variable is not set.")
     logger.info(f"Starting Convertio conversion for '{filename}'.")
@@ -79,16 +87,19 @@ def _start_conversion(file_stream: IO[bytes], filename: str) -> str:
         response = client.post(CONVERTIO_API_URL, json=payload, timeout=30)
         response.raise_for_status()
         data = response.json()
+        logger.debug(f"Convertio start conversion response: {data}")
         if data.get("status") == "error":
             raise ValueError(f"Convertio API error: {data.get('error')}")
         conversion_id = data.get("data", {}).get("id")
         if not conversion_id:
             raise ValueError("Failed to get a conversion ID from Convertio.")
         logger.info(f"Successfully started conversion with ID: {conversion_id}")
+        logger.debug(f"Exiting _start_conversion with conversion_id: {conversion_id}")
         return conversion_id
 
 def _poll_conversion_status(conversion_id: str) -> str:
     """Polls Convertio for conversion status and returns the output file URL."""
+    logger.debug(f"Entering _poll_conversion_status with conversion_id: {conversion_id}")
     logger.info(f"Polling status for conversion ID: {conversion_id}")
     status_url = f"{CONVERTIO_API_URL}/{conversion_id}/status"
     with httpx.Client() as client:
@@ -96,6 +107,7 @@ def _poll_conversion_status(conversion_id: str) -> str:
             response = client.get(status_url, timeout=30)
             response.raise_for_status()
             data = response.json()
+            logger.debug(f"Convertio poll status response: {data}")
             if data.get("status") == "error":
                 raise ValueError(f"Convertio status check failed: {data.get('error')}")
             step = data.get("data", {}).get("step")
@@ -105,6 +117,7 @@ def _poll_conversion_status(conversion_id: str) -> str:
                 if not output_url:
                     raise ValueError("Conversion finished, but no output URL was provided.")
                 logger.info("Conversion finished successfully.")
+                logger.debug(f"Exiting _poll_conversion_status with output_url: {output_url}")
                 return output_url
             elif step == "error":
                 raise ValueError("Conversion failed at Convertio.")
@@ -112,11 +125,14 @@ def _poll_conversion_status(conversion_id: str) -> str:
 
 def _download_html_content(url: str) -> str:
     """Downloads the HTML content from the given URL."""
+    logger.debug(f"Entering _download_html_content with url: {url}")
     logger.info(f"Downloading converted HTML from: {url}")
     with httpx.Client() as client:
         response = client.get(url, timeout=60, follow_redirects=True)
         response.raise_for_status()
-        return response.text
+        html_content = response.text
+        logger.debug(f"Exiting _download_html_content with html_content (first 100 chars): {html_content[:100]}")
+        return html_content
 
 # --- Private Helper Functions: Templating Workflow ---
 
@@ -125,9 +141,11 @@ def _get_replacement_map_from_llm(html_content: str) -> dict:
     Extracts text from HTML, sends it to an LLM, and gets back a map of
     static text to its corresponding Liquid placeholder.
     """
+    logger.debug("Entering _get_replacement_map_from_llm")
     logger.info("Extracting text from HTML for LLM processing.")
     soup = BeautifulSoup(html_content, 'html.parser')
     text_content = soup.get_text(separator='\n', strip=True)
+    logger.debug(f"Extracted text_content: {text_content}")
 
     if not text_content.strip():
         raise ValueError("No text content found in the HTML to process.")
@@ -166,8 +184,11 @@ Create a JSON object where each key is a string of static text found in the CV (
             temperature=0.0,
             response_format={"type": "json_object"},
         )
-        replacement_map = json.loads(response.choices[0].message.content)
+        replacement_map_str = response.choices[0].message.content
+        logger.debug(f"LLM response: {replacement_map_str}")
+        replacement_map = json.loads(replacement_map_str)
         logger.info("Successfully received replacement map from LLM.")
+        logger.debug(f"Exiting _get_replacement_map_from_llm with replacement_map: {replacement_map}")
         return replacement_map
     except Exception as e:
         logger.error(f"LLM replacement map generation failed: {e}", exc_info=True)
@@ -178,6 +199,7 @@ def _apply_replacements_to_html(html_content: str, replacement_map: dict) -> str
     Performs a DOM-aware search and replace on the HTML content.
     It iterates through text nodes to replace content without breaking the HTML structure.
     """
+    logger.debug(f"Entering _apply_replacements_to_html with replacement_map: {replacement_map}")
     logger.info(f"Applying {len(replacement_map)} replacements to the HTML using DOM-aware method.")
     soup = BeautifulSoup(html_content, 'html.parser')
 
@@ -190,6 +212,7 @@ def _apply_replacements_to_html(html_content: str, replacement_map: dict) -> str
                 text_node.string.replace_with(new_string)
 
     final_html = str(soup)
+    logger.debug(f"Exiting _apply_replacements_to_html with final_html (first 100 chars): {final_html[:100]}")
 
     # A simple validation to check if placeholders were injected
     if "{{" not in final_html:
@@ -205,6 +228,7 @@ def create_template_from_docx(file_stream: IO[bytes], filename: str) -> str:
     This process is optimized with a caching layer to avoid redundant API calls.
     """
     logger.info(f"[create_template_from_docx] Orchestrating template creation for '{filename}'.")
+    logger.debug(f"Entering create_template_from_docx with filename: {filename}")
 
     # Step 1: Calculate the file's hash and check the cache
     file_hash = _get_file_hash(file_stream)
@@ -234,6 +258,7 @@ def create_template_from_docx(file_stream: IO[bytes], filename: str) -> str:
     # Step 6: Validate the final Liquid syntax
     _validate_liquid_template(templated_html)
 
+    logger.debug("Exiting create_template_from_docx")
     return templated_html
 
 def _validate_liquid_template(template_string: str):
@@ -241,10 +266,12 @@ def _validate_liquid_template(template_string: str):
     Validates the Liquid syntax of the given template string.
     Raises a ValueError if the syntax is invalid.
     """
+    logger.debug("Entering _validate_liquid_template")
     try:
         logger.info("Validating final Liquid template syntax.")
-        Liquid(template_string)
+        parse(template_string)
         logger.info("Liquid template syntax is valid.")
     except Exception as e:
         logger.error(f"Liquid template validation failed: {e}", exc_info=True)
         raise ValueError("The generated template has invalid Liquid syntax.")
+    logger.debug("Exiting _validate_liquid_template")
