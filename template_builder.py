@@ -8,7 +8,7 @@ import hashlib
 from typing import IO, Optional
 import httpx
 from openai import OpenAI
-from liquid import Liquid
+import liquidpy
 from bs4 import BeautifulSoup
 
 # --- Configuration ---
@@ -175,20 +175,27 @@ Create a JSON object where each key is a string of static text found in the CV (
 
 def _apply_replacements_to_html(html_content: str, replacement_map: dict) -> str:
     """
-    Performs a safe search-and-replace on the HTML content using the provided map.
+    Performs a DOM-aware search and replace on the HTML content.
+    It iterates through text nodes to replace content without breaking the HTML structure.
     """
-    logger.info(f"Applying {len(replacement_map)} replacements to the HTML.")
-    # Sort by length descending to replace longer strings first (e.g., "Software Engineer" before "Engineer")
-    sorted_replacements = sorted(replacement_map.items(), key=lambda item: len(item[0]), reverse=True)
+    logger.info(f"Applying {len(replacement_map)} replacements to the HTML using DOM-aware method.")
+    soup = BeautifulSoup(html_content, 'html.parser')
 
-    for original_text, liquid_placeholder in sorted_replacements:
-        html_content = html_content.replace(original_text, liquid_placeholder)
+    for original_text, liquid_placeholder in replacement_map.items():
+        # Find all text nodes that contain the original text
+        for text_node in soup.find_all(text=lambda t: t and original_text in t):
+            # Replace only the matching text, not the entire node
+            if text_node.string:
+                new_string = text_node.string.replace(original_text, liquid_placeholder)
+                text_node.string.replace_with(new_string)
+
+    final_html = str(soup)
 
     # A simple validation to check if placeholders were injected
-    if "{{" not in html_content:
+    if "{{" not in final_html:
         logger.warning("No placeholders were injected. The document might not be a good candidate for templating.")
 
-    return html_content
+    return final_html
 
 # --- Public Orchestrator Function ---
 
@@ -224,4 +231,20 @@ def create_template_from_docx(file_stream: IO[bytes], filename: str) -> str:
     # Step 5: Apply the replacements to the original HTML
     templated_html = _apply_replacements_to_html(raw_html, replacement_map)
 
+    # Step 6: Validate the final Liquid syntax
+    _validate_liquid_template(templated_html)
+
     return templated_html
+
+def _validate_liquid_template(template_string: str):
+    """
+    Validates the Liquid syntax of the given template string.
+    Raises a ValueError if the syntax is invalid.
+    """
+    try:
+        logger.info("Validating final Liquid template syntax.")
+        liquidpy.Liquid(template_string)
+        logger.info("Liquid template syntax is valid.")
+    except Exception as e:
+        logger.error(f"Liquid template validation failed: {e}", exc_info=True)
+        raise ValueError("The generated template has invalid Liquid syntax.")
