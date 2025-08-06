@@ -6,15 +6,14 @@ This project provides a powerful backend service for processing, anonymizing, an
 
 The application is built around two primary workflows:
 
-1.  **CV Anonymization:** Takes a candidate's CV in any common format (PDF, DOCX, etc.), extracts its content into a structured JSON object, and renders it into a standardized, professional template. This is ideal for recruitment agencies and consulting firms who need to present candidates to clients in a consistent and anonymized format.
-
-2.  **Template Creation:** Allows a user to upload their own custom-styled CV in PDF format. The system analyzes the layout and creates a reusable HTML/Jinja2 template that preserves the original look and feel. This allows users to maintain their personal or corporate branding across all anonymized CVs.
+1.  **CV Anonymization:** Takes a candidate's CV in any common format (PDF, DOCX, etc.), extracts its content into a structured JSON object, and renders it into a standardized, professional template.
+2.  **Template Creation:** Allows a user to upload their own custom-styled CV in **`.docx`** format. The system uses the **Convertio API** to create a pixel-perfect HTML representation, which is then converted into a reusable HTML/Liquid template that preserves the original look and feel.
 
 ## Technical Architecture
 
 The system is designed as a Python-based REST API using the **FastAPI** framework.
 
-After significant iterative development, the project has adopted a **"PDF/HTML-First"** architecture to ensure maximum reliability, control, and quality. This approach avoids the fragility of direct `.docx` manipulation in favor of more stable, web-native formats.
+After significant iterative development, the project has adopted a **"Convertio-First"** architecture to ensure maximum reliability and deterministic output. This model uses the Convertio API for high-fidelity `DOCX-to-HTML` conversion, eliminating the unreliability of LLM-based visual analysis and guaranteeing that the final template is a perfect match for the user's original design.
 
 For a complete and detailed explanation of the architecture, data flows, and the project's technical evolution, please see the definitive technical blueprint: **[AGENTS.md](AGENTS.md)**.
 
@@ -23,7 +22,7 @@ For a complete and detailed explanation of the architecture, data flows, and the
 To set up and run the project locally, please refer to the detailed setup and usage instructions in **[HOW_TO_USE.md](HOW_TO_USE.md)**.
 
 This guide provides information on:
--   Prerequisites and dependencies
+-   Prerequisites and dependencies (`CONVERTIO_API_KEY`)
 -   Local setup and environment variables (`.env`)
 -   Running the server
 -   Using the API endpoints
@@ -31,10 +30,10 @@ This guide provides information on:
 ## Tech Stack
 
 -   **Backend:** FastAPI (Python)
--   **Data Extraction:**
+-   **Document Conversion:** Convertio API (for DOCX-to-HTML)
+-   **Data Extraction (from CVs):**
     -   `pytesseract` & `pdf2image` for OCR
-    -   OpenAI GPT-4o for structured data extraction (JSON) and visual analysis (PDF-to-HTML)
--   **Templating:** Jinja2
+    -   OpenAI GPT-4o for structured data extraction (JSON)
+-   **Templating:** Liquid (via `liquidpy`) & OpenAI GPT-4o for placeholder injection
 -   **Document Rendering:** WeasyPrint (for high-quality PDF output)
--   **Database & Storage:** Supabase (Postgres, S3-compatible storage)
--   **Development:** `pytest` for testing, `rich` for monitoring scripts
+-   **Development:** `pytest` for testing
