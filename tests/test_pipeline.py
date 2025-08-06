@@ -1,6 +1,7 @@
 import pytest
 import io
 import os
+import json
 from unittest.mock import patch, MagicMock, mock_open
 
 # Ensure the app path is in the python path
@@ -9,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from renderer import render_html_to_pdf
 from content_extractor import extract_json_from_cv
-from template_builder import create_template_from_docx # Updated import
+from template_builder import create_template_from_docx
 
 # --- Test for Renderer (Fix Verification) ---
 
@@ -56,56 +57,42 @@ def test_anonymization_pipeline_pdf_input(mock_weasyprint_html, mock_file, mock_
 
 
 @patch('httpx.Client')
+@patch('template_builder.BeautifulSoup')
 @patch('template_builder.OpenAI')
-def test_template_creation_pipeline_from_docx(mock_openai, mock_httpx_client_constructor):
+def test_template_creation_pipeline_from_docx_efficient(mock_openai, mock_beautiful_soup, mock_httpx_client_constructor):
     """
-    End-to-end test for the new template creation workflow using Convertio.
-    Mocks the external dependencies (Convertio API via httpx, and OpenAI).
+    End-to-end test for the EFFICIENT template creation workflow.
+    Mocks Convertio, BeautifulSoup, and OpenAI.
     """
     # Arrange
-    # --- Mock the Convertio API responses ---
+    # --- Mock Convertio API responses ---
     mock_start_response = MagicMock()
-    mock_start_response.status_code = 200
-    mock_start_response.json.return_value = {
-        "status": "ok",
-        "data": {"id": "test_conversion_id"}
-    }
-
-    mock_status_pending_response = MagicMock()
-    mock_status_pending_response.status_code = 200
-    mock_status_pending_response.json.return_value = {
-        "status": "ok",
-        "data": {"step": "convert", "step_percent": 50}
-    }
-
+    mock_start_response.json.return_value = {"status": "ok", "data": {"id": "test_id"}}
     mock_status_finished_response = MagicMock()
-    mock_status_finished_response.status_code = 200
     mock_status_finished_response.json.return_value = {
         "status": "ok",
-        "data": {
-            "step": "finish",
-            "step_percent": 100,
-            "output": {"url": "http://fake.convertio.url/output.html"}
-        }
+        "data": {"step": "finish", "output": {"url": "http://fake.url/output.html"}}
     }
-
     mock_download_response = MagicMock()
-    mock_download_response.status_code = 200
-    mock_download_response.text = "<h1>Raw HTML from Convertio</h1>"
+    mock_download_response.text = "<html><body><p>John Doe</p><p>Software Engineer</p></body></html>"
 
-    # Configure the mock client instance to return the sequence of responses
     mock_client_instance = MagicMock()
     mock_client_instance.post.return_value = mock_start_response
-    mock_client_instance.get.side_effect = [
-        mock_status_pending_response,
-        mock_status_finished_response,
-        mock_download_response
-    ]
+    mock_client_instance.get.side_effect = [mock_status_finished_response, mock_download_response]
     mock_httpx_client_constructor.return_value.__enter__.return_value = mock_client_instance
 
-    # --- Mock the OpenAI response for Liquid injection ---
+    # --- Mock BeautifulSoup text extraction ---
+    mock_soup_instance = MagicMock()
+    mock_soup_instance.get_text.return_value = "John Doe\nSoftware Engineer"
+    mock_beautiful_soup.return_value = mock_soup_instance
+
+    # --- Mock OpenAI response (now returns a replacement map) ---
+    replacement_map = {
+        "John Doe": "{{ name }}",
+        "Software Engineer": "{{ title }}"
+    }
     mock_llm_response = MagicMock()
-    mock_llm_response.choices[0].message.content = "<h1>{{ title }}</h1>"
+    mock_llm_response.choices[0].message.content = json.dumps(replacement_map)
     mock_openai.return_value.chat.completions.create.return_value = mock_llm_response
 
     # --- Prepare input file ---
@@ -115,14 +102,15 @@ def test_template_creation_pipeline_from_docx(mock_openai, mock_httpx_client_con
     final_template = create_template_from_docx(docx_stream, "test.docx")
 
     # Assert
-    # Verify Convertio calls
-    assert mock_client_instance.post.call_count == 1
-    assert mock_client_instance.get.call_count == 3 # status pending, status finished, download
+    # Verify BeautifulSoup was used correctly
+    mock_beautiful_soup.assert_called_once_with("<html><body><p>John Doe</p><p>Software Engineer</p></body></html>", 'html.parser')
+    mock_soup_instance.get_text.assert_called_once()
 
-    # Verify OpenAI call
+    # Verify OpenAI was called with the extracted text
     mock_openai.return_value.chat.completions.create.assert_called_once()
-    llm_prompt_html = mock_openai.return_value.chat.completions.create.call_args[1]['messages'][1]['content']
-    assert "<h1>Raw HTML from Convertio</h1>" in llm_prompt_html
+    llm_prompt_text = mock_openai.return_value.chat.completions.create.call_args[1]['messages'][1]['content']
+    assert "John Doe\nSoftware Engineer" in llm_prompt_text
 
-    # Verify final output
-    assert final_template == "<h1>{{ title }}</h1>"
+    # Verify final output is correctly assembled
+    expected_html = "<html><body><p>{{ name }}</p><p>{{ title }}</p></body></html>"
+    assert final_template == expected_html
