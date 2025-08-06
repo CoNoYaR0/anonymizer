@@ -3,15 +3,12 @@ uvicorn[standard]
 python-multipart
 supabase
 python-dotenv
-jinja2
-python-docx
 pytesseract
 pdf2image
 Pillow
 psutil
 httpx
 openai
-docxtpl
-mammoth
 weasyprint
 liquidpy
+python-docx
