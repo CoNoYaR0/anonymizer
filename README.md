@@ -7,7 +7,7 @@ This project provides a powerful backend service for processing, anonymizing, an
 The application is built around two primary workflows:
 
 1.  **CV Anonymization:** Takes a candidate's CV in any common format (PDF, DOCX, etc.), extracts its content into a structured JSON object, and renders it into a standardized, professional template.
-2.  **Template Creation:** Allows a user to upload their own custom-styled CV in **`.docx`** format. The system uses the **Convertio API** to create a pixel-perfect HTML representation, which is then converted into a reusable HTML/Liquid template that preserves the original look and feel.
+2.  **Template Creation:** Allows a user to upload their own custom-styled CV in **`.docx`** format. The system uses the **Convertio API** to create a pixel-perfect HTML representation, which is then converted into a reusable HTML/Liquid template that preserves the original look and feel. This process is now optimized with a caching layer to avoid redundant API calls and uses a DOM-aware approach for template injection to ensure visual fidelity.
 
 ## Technical Architecture
 
@@ -34,6 +34,6 @@ This guide provides information on:
 -   **Data Extraction (from CVs):**
     -   `pytesseract` & `pdf2image` for OCR
     -   OpenAI GPT-4o for structured data extraction (JSON)
--   **Templating:** Liquid (via `liquidpy`) & OpenAI GPT-4o for placeholder injection
+-   **Templating:** Liquid (via `liquid`) & OpenAI GPT-4o for placeholder injection
 -   **Document Rendering:** WeasyPrint (for high-quality PDF output)
 -   **Development:** `pytest` for testing

@@ -24,16 +24,19 @@ The system is divided into two primary workflows:
 This workflow allows a user to create a personal, reusable CV template from their existing, well-formatted `.docx` file.
 
 1.  **Input:** User uploads a high-quality, styled CV in **`.docx`** format.
-2.  **Stage 1: DOCX-to-HTML Conversion (Convertio API):**
-    -   The `.docx` file is sent to the **Convertio API**.
+2.  **Caching:** The system calculates a SHA-256 hash of the uploaded file and checks a database cache. If a previously converted HTML for this exact file exists, it skips the conversion step and uses the cached version.
+3.  **Stage 1: DOCX-to-HTML Conversion (Convertio API):**
+    -   If the file is not in the cache, the `.docx` file is sent to the **Convertio API**.
     -   Convertio performs a high-fidelity conversion, returning a single HTML file with all styling inlined. This process is deterministic and visually exact.
-3.  **Stage 2: Templating (Liquid Injection):**
+    -   The newly converted HTML is then stored in the cache for future use.
+4.  **Stage 2: Templating (Liquid Injection):**
     -   The clean, structured HTML is then passed to an LLM (e.g., GPT-4o).
     -   The LLM's *only* task is to intelligently identify and replace the static text content (e.g., the name "John Doe") with the corresponding Liquid placeholders (e.g., `{{ name }}`).
-4.  **Stage 3: Validation & Storage:**
-    -   The final HTML/Liquid template string is validated programmatically using the `liquidpy` library to ensure its syntax is correct.
+    -   This process is now DOM-aware, using `BeautifulSoup` to parse the HTML and replace text nodes, ensuring that the visual fidelity of the template is preserved.
+5.  **Stage 3: Validation & Storage:**
+    -   The final HTML/Liquid template string is validated programmatically using the `liquid` library to ensure its syntax is correct.
     -   The validated template is ready to be saved and associated with a user's account.
-5.  **Output:** A reusable, syntactically valid `template.liquid.html` file that perfectly matches the user's original branding and layout.
+6.  **Output:** A reusable, syntactically valid `template.liquid.html` file that perfectly matches the user's original branding and layout.
 
 ### Workflow 2: CV Anonymization (The "Usage" Phase)
 
@@ -46,7 +49,7 @@ This workflow remains unchanged. It is used to anonymize a new candidate's CV us
     -   The raw text is sent to an LLM to return a clean, canonical **JSON object** of the candidate's professional information.
 4.  **Stage C: Rendering:**
     -   The system retrieves the user's chosen HTML/Liquid template.
-    -   It renders the template using `liquidpy`, injecting the JSON data from Stage B.
+    -   It renders the template using `liquid`, injecting the JSON data from Stage B.
 5.  **Output:** The final document is delivered as a high-quality **PDF** (rendered via `WeasyPrint`) or as a raw HTML string.
 
 ---
@@ -72,8 +75,8 @@ Understanding the "why" behind our architecture is critical.
 ## 4. Key Modules & Final State
 
 -   `main.py`: The FastAPI orchestrator. The template creation endpoint is now `/templates/create-from-docx` and accepts `.docx` files.
--   `template_builder.py`: This module has been completely refactored. It no longer uses LLMs for HTML generation. Instead, it contains the logic to call the Convertio API, poll for results, download the converted HTML, and then orchestrate the Liquid injection via a separate LLM call.
+-   `template_builder.py`: This module has been completely refactored. It no longer uses LLMs for HTML generation. Instead, it contains the logic to call the Convertio API, poll for results, download the converted HTML, and then orchestrate the Liquid injection via a separate LLM call. It also includes the caching logic and the DOM-aware template injection.
 -   `content_extractor.py`: Unchanged. Continues to handle parsing of incoming candidate CVs.
 -   `renderer.py`: Unchanged. Continues to render the final HTML/Liquid template into a PDF using `WeasyPrint`.
 -   **Legacy Files:** All files related to the old `.docx` and PDF-to-HTML workflows (e.g., `docx_to_template_converter.py`, `llm_refiner.py`, etc.) have been deleted.
--   **Dependencies:** `httpx` is used for the Convertio API calls. `liquidpy` is the standard templating engine. `WeasyPrint` is the PDF renderer.
+-   **Dependencies:** `httpx` is used for the Convertio API calls. `liquid` is the standard templating engine. `WeasyPrint` is the PDF renderer.
