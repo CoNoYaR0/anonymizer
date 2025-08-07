@@ -47,26 +47,41 @@ def upload_file_to_storage(bucket_name: str, file_path: str, file_content: bytes
     Uploads a file to a specified Supabase storage bucket.
 
     Args:
-        bucket_name: The name of the bucket to upload to (e.g., "cvs").
-        file_path: The desired path and filename in the bucket for the uploaded file.
+        bucket_name: The name of the bucket to upload to.
+        file_path: The desired path and filename in the bucket.
         file_content: The binary content of the file to upload.
 
     Returns:
         The public URL of the uploaded file.
     """
-    # TODO: Implement the file upload logic.
-    # 1. Get the Supabase client.
-    # 2. Use `client.storage.from_(bucket_name).upload(...)`
-    # 3. Use `client.storage.from_(bucket_name).get_public_url(...)`
-    # 4. Return the public URL.
+    try:
+        client = get_supabase_client()
 
-    print(f"TODO: Uploading {file_path} to bucket {bucket_name}.")
+        # The `upload` method in supabase-py for Python requires a file path, not bytes.
+        # We will save the bytes to a temporary file to upload it.
+        # This is a current limitation of the library.
+        temp_file_path = f"temp_upload_{os.path.basename(file_path)}"
+        with open(temp_file_path, "wb") as f:
+            f.write(file_content)
 
-    # Placeholder return
-    client = get_supabase_client()
-    # In a real implementation, you would get this from the upload response.
-    public_url = f"{supabase_url}/storage/v1/object/public/{bucket_name}/{file_path}"
-    return public_url
+        client.storage.from_(bucket_name).upload(
+            path=file_path,
+            file=temp_file_path,
+            file_options={"content-type": "application/octet-stream"} # Generic content type
+        )
+
+        os.remove(temp_file_path) # Clean up the temporary file
+
+        public_url = client.storage.from_(bucket_name).get_public_url(file_path)
+        print(f"Successfully uploaded {file_path} to bucket {bucket_name}. URL: {public_url}")
+        return public_url
+
+    except Exception as e:
+        print(f"Error uploading file to Supabase: {e}", file=sys.stderr)
+        # Clean up temp file on error as well
+        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        raise e
 
 
 def download_file_from_storage(bucket_name: str, file_path: str) -> bytes:
@@ -80,15 +95,14 @@ def download_file_from_storage(bucket_name: str, file_path: str) -> bytes:
     Returns:
         The binary content of the downloaded file.
     """
-    # TODO: Implement the file download logic.
-    # 1. Get the Supabase client.
-    # 2. Use `client.storage.from_(bucket_name).download(...)`
-    # 3. Return the file content.
-
-    print(f"TODO: Downloading {file_path} from bucket {bucket_name}.")
-
-    # Placeholder return
-    return b"placeholder file content"
+    try:
+        client = get_supabase_client()
+        response = client.storage.from_(bucket_name).download(file_path)
+        print(f"Successfully downloaded {file_path} from bucket {bucket_name}.")
+        return response
+    except Exception as e:
+        print(f"Error downloading file from Supabase: {e}", file=sys.stderr)
+        raise e
 
 
 # Initialize the client when the module is loaded
