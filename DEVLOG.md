@@ -74,3 +74,11 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   Updated `main.py` to replace all temporary local file handling with robust calls to the new storage module, making the application stateless.
         *   Updated `requirements.txt` and `.env.example` to include the `supabase-py` library and new environment variables.
 *   **Status:** The application is now fully integrated with Supabase.
+*   **Action: Bug Fix - Database Connection**
+    *   **Date:** 2025-08-07
+    *   **Issue:** The application was failing to connect to the Supabase database due to an IPv6 resolution issue with the default database host.
+    *   **Fix:**
+        *   Modified the database connection logic in `src/database.py` to use the IPv4-compatible **session pooler** host provided by Supabase.
+        *   Added a `DB_HOST` environment variable to make this configurable.
+        *   Updated `HOW_TO_USE.md` to reflect this new requirement.
+*   **Status:** The database connection is now stable and uses the recommended Supabase pooler.

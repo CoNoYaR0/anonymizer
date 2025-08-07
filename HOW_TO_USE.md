@@ -61,6 +61,7 @@ SUPABASE_URL="https://your-project-id.supabase.co"
 SUPABASE_ANON_KEY="your-supabase-anon-key"
 DB_PASSWORD="your-supabase-db-password"
 PROJECT_NAME="your-supabase-project-name"
+DB_HOST="aws-0-your-region.pooler.supabase.com"
 
 # --- Application Settings ---
 DEBUG="False"
@@ -71,6 +72,7 @@ DEBUG="False"
 *   **`SUPABASE_URL` & `SUPABASE_ANON_KEY`**: Found in your Supabase project's API settings.
 *   **`DB_PASSWORD`**: The database password you set when creating your Supabase project.
 *   **`PROJECT_NAME`**: A name for your project, used for organizing storage buckets (e.g., "anonymizer").
+*   **`DB_HOST`**: The **Connection Pooler** host for your database. You can find this in your Supabase project's Database settings. Using the pooler is required for IPv4 compatibility.
 
 ### 4. Run Database Migrations
 Before the first run, set up the database schema:
@@ -87,7 +89,7 @@ Once you have completed the setup, you can run the application using `uvicorn`:
 ```bash
 uvicorn src.main:app --reload
 ```
-The API will be available at `http://1227.0.0.1:8000`.
+The API will be available at `http://127.0.0.1:8000`.
 
 ---
 
