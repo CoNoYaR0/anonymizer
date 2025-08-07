@@ -126,6 +126,13 @@ The goal of this project is to create a backend service that can take a CV in PD
             3.  `POST /templates/validate-and-save`: Allows the user to save the validated/corrected Liquid template, overwriting the raw HTML and finalizing the template.
         *   Updated `template_builder.py` to separate the conversion and injection logic to support this new workflow.
 *   **Status:** The application now supports a robust, flexible, and developer-friendly workflow for creating and validating templates.
+*   **Action: Bug Fix - Convertio API Integration**
+    *   **Date:** 2025-08-07
+    *   **Issue:** The Convertio API was returning a `KeyError: 'upload_url'` because the two-step upload process was not supported as expected. The API was not returning an `upload_url`.
+    *   **Fix:**
+        *   Refactored the `convert_docx_to_html_and_cache` function to use the `base64` input method.
+        *   The file content is now encoded in Base64 and sent in a single, atomic request to the Convertio API, which is more robust and resolves the error.
+*   **Status:** The Convertio API integration is now correct and functional.
 *   **Action: Refactor - Simplified DB Connection Logic**
     *   **Date:** 2025-08-07
     *   **Issue:** The previous fix for the database authentication was overly complex. It parsed the `SUPABASE_URL` to build the username dynamically, when a simpler solution was available.
