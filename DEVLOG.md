@@ -150,6 +150,11 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   The extracted text is now split into smaller chunks, and each chunk is sent to the OpenAI API in a separate request.
         *   The resulting JSON maps are then merged before the final replacement step.
 *   **Status:** The AI injection process is now robust and can handle large documents without hitting API token limits.
+*   **Action: Bug Fix - AI Injection Rate Limiting**
+    *   **Date:** 2025-08-07
+    *   **Issue:** The chunking logic solved the request size limit, but triggered a new `rate_limit_exceeded` error due to too many requests per minute (TPM).
+    *   **Fix:** Added a 2-second delay (`time.sleep(2)`) between each chunked API call to OpenAI.
+*   **Status:** The AI injection process now respects the API's rate limits and can process large documents successfully.
 *   **Action: Refactor - Simplified DB Connection Logic**
     *   **Date:** 2025-08-07
     *   **Issue:** The previous fix for the database authentication was overly complex. It parsed the `SUPABASE_URL` to build the username dynamically, when a simpler solution was available.
