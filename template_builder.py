@@ -10,10 +10,15 @@ import httpx
 from openai import OpenAI
 from liquid import Liquid
 from bs4 import BeautifulSoup
+from database import get_db_connection, release_db_connection
+
 
 # --- Configuration ---
 logger = logging.getLogger(__name__)
-CONVERTIO_API_KEY = os.getenv("CONVERTIO_API_KEY", "b1ba2b0069023e1b292f3936d5c62197")
+CONVERTIO_API_KEY = os.getenv("CONVERTIO_API_KEY")
+if not CONVERTIO_API_KEY:
+    logger.critical("CONVERTIO_API_KEY environment variable is not set. This is a fatal error.")
+    raise RuntimeError("CONVERTIO_API_KEY is not configured, cannot proceed with template conversion.")
 CONVERTIO_API_URL = "https://api.convertio.co/convert"
 
 # --- Database and Caching Functions (Mockable) ---
@@ -36,39 +41,63 @@ def _get_file_hash(file_stream: IO[bytes]) -> str:
 def _get_cached_html(file_hash: str) -> Optional[str]:
     """
     Retrieves cached HTML content from the database.
-    This is a placeholder for actual database logic.
-    In a real application, this would query the `html_conversion_cache` table.
     """
     logger.debug(f"Entering _get_cached_html with hash: {file_hash}")
-    # This would be a database call, e.g.,
-    # from db import get_connection
-    # with get_connection() as conn:
-    #     with conn.cursor() as cur:
-    #         cur.execute("SELECT html_content FROM html_conversion_cache WHERE file_hash = %s", (file_hash,))
-    #         result = cur.fetchone()
-    #         return result[0] if result else None
-    logger.warning("Database lookup is mocked. This is not a production implementation.")
-    logger.debug("Exiting _get_cached_html with None")
-    return None # Simulate cache miss for now
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            logger.error("Could not get a database connection.")
+            return None
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT html_content FROM html_conversion_cache WHERE file_hash = %s",
+                (file_hash,)
+            )
+            result = cur.fetchone()
+            if result:
+                logger.info(f"Cache hit for hash: {file_hash}")
+                return result[0]
+            else:
+                logger.info(f"Cache miss for hash: {file_hash}")
+                return None
+    except Exception as e:
+        logger.error(f"Error retrieving cached HTML: {e}", exc_info=True)
+        return None
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 def _cache_html(file_hash: str, html_content: str):
     """
     Saves new HTML content to the database cache.
-    This is a placeholder for actual database logic.
     """
     logger.debug(f"Entering _cache_html with hash: {file_hash}")
-    # This would be a database call, e.g.,
-    # from db import get_connection
-    # with get_connection() as conn:
-    #     with conn.cursor() as cur:
-    #         cur.execute(
-    #             "INSERT INTO html_conversion_cache (file_hash, html_content) VALUES (%s, %s)",
-    #             (file_hash, html_content)
-    #         )
-    #         conn.commit()
-    logger.warning("Database insert is mocked. This is not a production implementation.")
-    logger.debug("Exiting _cache_html")
-    pass # Simulate cache write for now
+    conn = None
+    try:
+        conn = get_db_connection()
+        if conn is None:
+            logger.error("Could not get a database connection for caching.")
+            return
+
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO html_conversion_cache (file_hash, html_content)
+                VALUES (%s, %s)
+                ON CONFLICT (file_hash) DO NOTHING;
+                """,
+                (file_hash, html_content)
+            )
+            conn.commit()
+            logger.info(f"Successfully cached HTML for hash: {file_hash}")
+    except Exception as e:
+        logger.error(f"Error caching HTML: {e}", exc_info=True)
+        if conn:
+            conn.rollback()
+    finally:
+        if conn:
+            release_db_connection(conn)
 
 # --- Private Helper Functions: Convertio Workflow ---
 
