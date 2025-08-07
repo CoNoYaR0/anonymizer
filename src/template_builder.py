@@ -4,9 +4,13 @@ import requests
 import time
 import sys
 import base64
+import json
 from typing import Optional
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup, NavigableString
+from openai import OpenAI
 
+# ... (other imports and functions remain the same)
 # Import caching functions from the database module
 from . import database
 
@@ -14,7 +18,7 @@ from . import database
 load_dotenv()
 CONVERTIO_API_KEY = os.getenv("CONVERTIO_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
+# ... (_calculate_file_hash and convert_docx_to_html_and_cache are unchanged)
 def _calculate_file_hash(file_content: bytes) -> str:
     """Calculates the SHA-256 hash of the file content."""
     sha256_hash = hashlib.sha256()
@@ -103,9 +107,53 @@ def inject_liquid_placeholders(html_content: str) -> str:
     """
     Uses an LLM to intelligently replace static text in HTML with Liquid placeholders.
     """
-    # ... (rest of the function remains the same)
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is not set.")
-    print("TODO: Calling OpenAI API to inject Liquid placeholders.")
-    injected_html = html_content + "\n<!-- Injected by AI with Liquid placeholders -->"
-    return injected_html.replace("<p>This is content from a DOCX.</p>", "<p>{{ placeholder_text }}</p>")
+
+    print("Parsing HTML with BeautifulSoup...")
+    soup = BeautifulSoup(html_content, "html.parser")
+
+    # 1. Extract all non-empty text nodes
+    text_nodes = [text for text in soup.find_all(string=True) if text.strip()]
+
+    # 2. Construct the prompt for the AI
+    prompt = f"""
+    You are a templating expert. Your task is to analyze the following text content extracted from an HTML document and convert it into a valid JSON object that maps the original text to a Liquid placeholder.
+
+    Guidelines:
+    - Identify which pieces of text are dynamic data (e.g., names, dates, job titles, descriptions).
+    - Map this dynamic text to a logical Liquid variable (e.g., "{{{{ candidate.name }}}}", "{{{{ experience.title }}}}").
+    - Text that appears to be a static label (e.g., "Experience", "Education", "Skills") should NOT be included in the final JSON.
+    - The JSON keys must be the EXACT original text, and the values must be the Liquid placeholders.
+    - Ensure the output is ONLY a valid JSON object.
+
+    Here is the text content to analyze:
+    {json.dumps(text_nodes, indent=2)}
+
+    Return the JSON object now.
+    """
+
+    print("Calling OpenAI API to get placeholder map...")
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"}
+    )
+
+    response_content = response.choices[0].message.content
+    print(f"DEBUG: OpenAI response: {response_content}")
+
+    try:
+        replacement_map = json.loads(response_content)
+    except json.JSONDecodeError:
+        raise Exception("Failed to decode JSON from OpenAI response.")
+
+    # 3. Replace the text in the soup object
+    print("Replacing text nodes with Liquid placeholders...")
+    for text_node in soup.find_all(string=True):
+        if text_node.strip() in replacement_map:
+            new_content = replacement_map[text_node.strip()]
+            text_node.replace_with(NavigableString(new_content))
+
+    return str(soup)

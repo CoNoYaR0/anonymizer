@@ -133,6 +133,15 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   Refactored the `convert_docx_to_html_and_cache` function to use the `base64` input method.
         *   The file content is now encoded in Base64 and sent in a single, atomic request to the Convertio API, which is more robust and resolves the error.
 *   **Status:** The Convertio API integration is now correct and functional.
+*   **Action: Implemented AI Placeholder Injection**
+    *   **Date:** 2025-08-07
+    *   **Task:** Replace the placeholder `TODO` in `template_builder.inject_liquid_placeholders` with a functional implementation.
+    *   **Implementation:**
+        *   The function now uses `BeautifulSoup` to parse the HTML and extract all relevant text nodes.
+        *   It constructs a detailed prompt for the OpenAI GPT-4o model, asking it to act as a templating expert and return a JSON map of original text to Liquid placeholders.
+        *   It calls the OpenAI API and specifies a JSON response format.
+        *   After receiving the map, it uses `BeautifulSoup` again to safely find and replace the text nodes with their corresponding Liquid placeholders, preserving the HTML structure.
+*   **Status:** The core AI feature of the template creation workflow is now fully implemented.
 *   **Action: Refactor - Simplified DB Connection Logic**
     *   **Date:** 2025-08-07
     *   **Issue:** The previous fix for the database authentication was overly complex. It parsed the `SUPABASE_URL` to build the username dynamically, when a simpler solution was available.
