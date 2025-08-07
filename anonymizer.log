@@ -1,0 +1,5 @@
+2025-08-07 04:50:40,492 - root - INFO - DEBUG mode is active. Logging all levels to anonymizer.log
+2025-08-07 04:50:40,492 - __main__ - DEBUG - This is a test debug message.
+2025-08-07 04:50:40,492 - __main__ - INFO - This is a test info message.
+2025-08-07 04:50:40,492 - __main__ - WARNING - This is a test warning message.
+CRITICAL: 2025-08-07 04:51:21 - template_builder - CONVERTIO_API_KEY environment variable is not set. This is a fatal error.

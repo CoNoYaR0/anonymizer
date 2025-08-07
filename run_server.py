@@ -1,20 +1,25 @@
-import subprocess
-import time
+import uvicorn
+from dotenv import load_dotenv
+from logger_config import get_logging_config
+import os
 
-with open("app.log", "wb") as f:
-    process = subprocess.Popen(["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"], stdout=f, stderr=subprocess.STDOUT)
-    print(f"Server started with PID: {process.pid}")
+if __name__ == "__main__":
+    # Load environment variables from .env file
+    load_dotenv()
 
-    # Give the server some time to start
-    time.sleep(20)
+    # Get the logging configuration
+    log_config = get_logging_config()
 
-    # Check if the process is still running
-    if process.poll() is None:
-        print("Server is running.")
-    else:
-        print(f"Server terminated with exit code {process.poll()}. Check app.log for details.")
+    # Get server settings from environment variables
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", 8000))
+    reload = os.getenv("RELOAD", "False").lower() in ("true", "1", "t")
 
-    # In a real scenario, you'd keep the server running.
-    # For this test, we'll let it run for a bit then terminate.
-    # Here, we will just let the script finish, and the server will be a zombie process.
-    # This is not ideal, but it's the best I can do in this environment.
+    # Run the Uvicorn server
+    uvicorn.run(
+        "main:app",
+        host=host,
+        port=port,
+        reload=reload,
+        log_config=log_config
+    )
