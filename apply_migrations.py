@@ -1,24 +1,27 @@
 import os
 import sys
 import psycopg2
-from psycopg2 import sql
 from dotenv import load_dotenv
+
+# It's better to import the tested function than to duplicate logic.
+# We need to temporarily add `src` to the path to allow the import
+# when running this script from the root directory.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
+from database import _get_supabase_db_url
 
 def apply_migrations():
     """
-    Connects to the PostgreSQL database and applies the necessary schema migrations.
+    Connects to the PostgreSQL database using Supabase credentials
+    and applies the necessary schema migrations.
     """
     # Load environment variables from .env file
     load_dotenv()
 
-    db_url = os.getenv("DB_URL")
-    if not db_url:
-        print("Error: DB_URL environment variable is not set.", file=sys.stderr)
-        print("Please create a .env file and set the DB_URL.", file=sys.stderr)
-        sys.exit(1)
-
     conn = None
     try:
+        # Get the connection string from our centralized function
+        db_url = _get_supabase_db_url()
+
         # Connect to the database
         print(f"Connecting to the database...")
         conn = psycopg2.connect(db_url)
@@ -40,9 +43,9 @@ def apply_migrations():
         cursor.close()
         print("Database migration applied successfully.")
 
-    except psycopg2.OperationalError as e:
+    except (ValueError, psycopg2.OperationalError) as e:
         print(f"Error: Could not connect to the database.", file=sys.stderr)
-        print(f"Please check your DB_URL and ensure the database server is running.", file=sys.stderr)
+        print(f"Please check your Supabase environment variables in the .env file.", file=sys.stderr)
         print(f"Details: {e}", file=sys.stderr)
         sys.exit(1)
 

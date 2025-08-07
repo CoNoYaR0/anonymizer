@@ -65,3 +65,12 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   Established the database schema and a new migration script (`apply_migrations.py`).
         *   Set up project configuration files (`requirements.txt`, `.gitignore`, `.env.example`).
 *   **Status:** The new project skeleton is complete and submitted. It is now ready for the implementation of the core application logic within the placeholder functions.
+*   **Action: Supabase Integration for Production Readiness**
+    *   **Date:** 2025-08-07
+    *   **Task:** Integrate the application with a Supabase backend for database and file storage, moving it from a skeleton to a production-ready foundation.
+    *   **Implementation:**
+        *   Refactored the database connection logic (`database.py`, `apply_migrations.py`) to dynamically construct the connection string from Supabase-specific environment variables.
+        *   Added a new `storage.py` module to handle all file operations (upload, download) with Supabase Storage.
+        *   Updated `main.py` to replace all temporary local file handling with robust calls to the new storage module, making the application stateless.
+        *   Updated `requirements.txt` and `.env.example` to include the `supabase-py` library and new environment variables.
+*   **Status:** The application is now fully integrated with Supabase.
