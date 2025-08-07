@@ -1,11 +1,10 @@
 import uvicorn
-from dotenv import load_dotenv
 from logger_config import get_logging_config
 import os
 
 if __name__ == "__main__":
-    # Load environment variables from .env file
-    load_dotenv()
+    # The .env file is now loaded in main.py, which is the Uvicorn entry point.
+    # This ensures it's loaded correctly even when using the reloader.
 
     # Get the logging configuration
     log_config = get_logging_config()
