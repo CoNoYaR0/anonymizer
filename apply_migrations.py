@@ -1,6 +1,10 @@
 import os
 import logging
+from dotenv import load_dotenv
 from database import get_db_connection, release_db_connection
+
+# Load environment variables from .env file
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

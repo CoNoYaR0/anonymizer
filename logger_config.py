@@ -1,9 +1,11 @@
 import os
-import logging
+import sys
 
 def get_logging_config():
     """
-    Creates a logging configuration dictionary for Uvicorn.
+    Creates a logging configuration dictionary.
+    This configuration sets up a console logger and, if DEBUG=true,
+    a file logger that mirrors the console output.
     """
     LOG_LEVEL = "INFO"
     DEBUG_MODE = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
@@ -11,43 +13,40 @@ def get_logging_config():
     if DEBUG_MODE:
         LOG_LEVEL = "DEBUG"
 
+    # Base configuration with a console handler
     config = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
             "default": {
-                "()": "uvicorn.logging.DefaultFormatter",
-                "fmt": "%(levelprefix)s %(asctime)s - %(name)s - %(message)s",
+                "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
                 "datefmt": "%Y-%m-%d %H:%M:%S",
             },
         },
         "handlers": {
-            "default": {
-                "formatter": "default",
+            "console": {
                 "class": "logging.StreamHandler",
-                "stream": "ext://sys.stderr",
+                "formatter": "default",
+                "stream": "ext://sys.stdout",
             },
         },
-        "loggers": {
-            "": {"handlers": ["default"], "level": LOG_LEVEL},
-            "uvicorn.error": {"level": "INFO"},
-            "uvicorn.access": {"handlers": ["default"], "level": "INFO", "propagate": False},
+        "root": {
+            "level": LOG_LEVEL,
+            "handlers": ["console"],
         },
     }
 
     if DEBUG_MODE:
-        # Add a file handler only when DEBUG is true
-        config["handlers"]["debug_file"] = {
-            "formatter": "default",
+        # If in debug mode, add a file handler to mirror the console output.
+        config["handlers"]["file"] = {
             "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "default",
             "filename": "anonymizer.log",
             "maxBytes": 5 * 1024 * 1024,  # 5 MB
             "backupCount": 3,
             "encoding": "utf-8",
         }
-        # Add the file handler to the root logger
-        config["loggers"][""]["handlers"].append("debug_file")
-        logging.getLogger().info("DEBUG mode is active. Logging all levels to anonymizer.log")
-
+        # Add the file handler to the root logger's list of handlers
+        config["root"]["handlers"].append("file")
 
     return config
