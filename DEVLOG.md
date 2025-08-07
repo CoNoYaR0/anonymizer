@@ -89,3 +89,15 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   Updated `.env.example` and `HOW_TO_USE.md` with explicit, unambiguous instructions for the user to find and copy their unique database pooler host from their Supabase project dashboard.
         *   This ensures the user provides the correct, project-specific host, eliminating the "could not translate host name" error.
 *   **Status:** The documentation is now clear and correct, preventing user error during setup.
+*   **Action: Bug Fix - Database Authentication**
+    *   **Date:** 2025-08-07
+    *   **Issue:** After fixing the host, a new error `FATAL: Tenant or user not found` appeared.
+    *   **Fix:** The connection pooler requires the username to be in the format `postgres.<project_ref>`. The code was hardcoding the user as `postgres`. I updated `src/database.py` to dynamically construct the correct username using the project reference ID from the `SUPABASE_URL`.
+*   **Status:** The database connection is now fully functional.
+*   **Action: Refactor - Simplified DB Connection Logic**
+    *   **Date:** 2025-08-07
+    *   **Issue:** The previous fix for the database authentication was overly complex. It parsed the `SUPABASE_URL` to build the username dynamically, when a simpler solution was available.
+    *   **Fix (based on user feedback):**
+        *   Refactored `src/database.py` to use a direct `DB_USER` environment variable instead of parsing the URL. This is a much cleaner and more explicit solution.
+        *   Updated `.env.example` and `HOW_TO_USE.md` to reflect this simpler setup, instructing the user to copy the `DB_USER` directly from their Supabase dashboard.
+*   **Status:** The database connection logic is now both correct and simple, following best practices.

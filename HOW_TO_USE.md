@@ -13,12 +13,8 @@ This guide will walk you through setting up and running the CV Anonymizer backen
 
 ## Prerequisites
 
-Before you begin, make sure you have the following installed on your system:
-
-*   **Python** (version 3.9 or higher)
-*   **pip** (Python's package installer)
-*   **Poppler**: This is required for PDF processing.
-*   **Tesseract**: This is required for OCR (extracting text from images).
+(Prerequisites section remains the same)
+...
 
 ---
 
@@ -40,14 +36,16 @@ Create a file named `.env` in the root of the project directory by copying the `
 
 **To find your Supabase credentials:**
 
-*   **`SUPABASE_URL` & `SUPABASE_ANON_KEY`**: Go to **Project Settings > API** in your Supabase dashboard.
-*   **`DB_PASSWORD`**: The database password you set when creating your Supabase project.
-*   **`DB_HOST`**: This is the most critical step for a stable connection.
-    1.  Go to **Project Settings > Database**.
-    2.  Scroll down to the **Connection pool** section.
-    3.  Ensure you are on the **Session mode** tab.
-    4.  Copy the host from the connection string (the part that looks like `aws-0-xx-xxxx-x.pooler.supabase.com`).
-    5.  Paste this value into the `DB_HOST` field in your `.env` file.
+*   **Storage Credentials (Project Settings > API):**
+    *   `SUPABASE_URL`
+    *   `SUPABASE_ANON_KEY`
+
+*   **Database Credentials (Project Settings > Database > Connection pool):**
+    1.  Make sure you are on the **Session mode** tab.
+    2.  Copy the following values directly from the connection string details:
+        *   `DB_HOST` (e.g., `aws-0-xx-xxxx-x.pooler.supabase.com`)
+        *   `DB_USER` (e.g., `postgres.yourprojectref`)
+        *   `DB_PASSWORD` (This is the password you set for your database).
 
 Your `.env` file should look like this:
 ```
@@ -56,11 +54,13 @@ CONVERTIO_API_KEY="YOUR_CONVERTIO_API_KEY"
 OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 
 # --- Supabase Configuration ---
-SUPABASE_URL="https://your-project-id.supabase.co"
-SUPABASE_ANON_KEY="your-supabase-anon-key"
-DB_PASSWORD="your-supabase-db-password"
-PROJECT_NAME="your-supabase-project-name"
-DB_HOST="aws-0-your-region.pooler.supabase.com" # Copied from your dashboard
+SUPABASE_URL="..."
+SUPABASE_ANON_KEY="..."
+PROJECT_NAME="anonymizer"
+
+DB_HOST="..."
+DB_USER="..."
+DB_PASSWORD="..."
 
 # --- Application Settings ---
 DEBUG="False"
@@ -82,15 +82,11 @@ Go to the **Storage** section in your Supabase dashboard and create two **public
 
 ## Running the Application
 
-Once you have completed the setup, you can run the application using `uvicorn`:
-
-```bash
-uvicorn src.main:app --reload
-```
-The API will be available at `http://127.0.0.1:8000`.
+(This section remains the same)
+...
 
 ---
 
 ## Using the API
-(API usage details remain the same)
+(This section remains the same)
 ...

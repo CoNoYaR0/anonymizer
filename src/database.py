@@ -23,22 +23,22 @@ def _get_supabase_db_url() -> str:
         ValueError: If any of the required Supabase environment variables are missing.
     """
     db_host = os.getenv("DB_HOST")
+    db_user = os.getenv("DB_USER")
     db_password = os.getenv("DB_PASSWORD")
 
-    if not all([db_host, db_password]):
+    if not all([db_host, db_user, db_password]):
         raise ValueError(
-            "Missing one or more required Supabase environment variables: "
-            "DB_HOST, DB_PASSWORD. Please check your .env file."
+            "Missing one or more required Supabase database environment variables: "
+            "DB_HOST, DB_USER, DB_PASSWORD. Please check your .env file."
         )
 
     # Use the session pooler connection string format for IPv4 compatibility
-    return f"postgresql://postgres:{db_password}@{db_host}:6543/postgres"
+    return f"postgresql://{db_user}:{db_password}@{db_host}:6543/postgres"
 
 
 def initialize_connection_pool():
     """
     Initializes the PostgreSQL connection pool using Supabase credentials.
-    This should be called once when the application starts up.
     """
     global connection_pool
     if connection_pool:
@@ -76,14 +76,12 @@ def release_db_connection(conn):
         connection_pool.putconn(conn)
 
 # --- Caching Logic ---
-# (The rest of the file remains the same)
 
 def get_cached_html(file_hash: str) -> Optional[str]:
     """
     Retrieves cached HTML content from the database for a given file hash.
     """
     # TODO: Implement the database query logic.
-    print(f"TODO: Checking cache for hash: {file_hash}")
     conn = None
     try:
         conn = get_db_connection()
@@ -98,7 +96,6 @@ def cache_html(file_hash: str, html_content: str) -> None:
     Saves new HTML content to the database cache.
     """
     # TODO: Implement the database insertion logic.
-    print(f"TODO: Caching HTML for hash: {file_hash}")
     conn = None
     try:
         conn = get_db_connection()
