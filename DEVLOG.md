@@ -116,6 +116,16 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   Implemented the full, multi-step Convertio API workflow: start conversion, upload file, poll for status, and download the resulting HTML.
         *   The function now takes file bytes as input and handles the temporary file creation required for the API call.
 *   **Status:** The DOCX-to-HTML conversion pipeline is now fully functional.
+*   **Action: Architectural Pivot - Manual Validation Workflow**
+    *   **Date:** 2025-08-07
+    *   **Reasoning (based on user feedback):** The fully automated workflow is efficient but lacks flexibility for the iterative development of the AI injection step. A manual validation loop is necessary to refine AI prompts and ensure template quality without losing the original, clean HTML conversion.
+    *   **Implementation:**
+        *   Refactored the template creation process into a three-step workflow with dedicated API endpoints:
+            1.  `POST /templates/create-from-docx`: Converts DOCX to raw HTML and stores it.
+            2.  `POST /templates/inject`: Runs the AI injection on the stored HTML and returns it for review without saving.
+            3.  `POST /templates/validate-and-save`: Allows the user to save the validated/corrected Liquid template, overwriting the raw HTML and finalizing the template.
+        *   Updated `template_builder.py` to separate the conversion and injection logic to support this new workflow.
+*   **Status:** The application now supports a robust, flexible, and developer-friendly workflow for creating and validating templates.
 *   **Action: Refactor - Simplified DB Connection Logic**
     *   **Date:** 2025-08-07
     *   **Issue:** The previous fix for the database authentication was overly complex. It parsed the `SUPABASE_URL` to build the username dynamically, when a simpler solution was available.
