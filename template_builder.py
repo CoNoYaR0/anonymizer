@@ -8,9 +8,10 @@ import hashlib
 from typing import IO, Optional
 import httpx
 from openai import OpenAI
-from liquid import Liquid
+from liquid import Liquid, exceptions
 from bs4 import BeautifulSoup
 from database import get_db_connection, release_db_connection
+from jinja2 import exceptions as Jinja2Exceptions
 
 
 # --- Configuration ---
@@ -292,15 +293,35 @@ def create_template_from_docx(file_stream: IO[bytes], filename: str) -> str:
 
 def _validate_liquid_template(template_string: str):
     """
-    Validates the Liquid syntax of the given template string.
-    Raises a ValueError if the syntax is invalid.
+    Performs robust validation on the generated Liquid template string.
     """
     logger.debug("Entering _validate_liquid_template")
+    logger.info("Performing robust validation of the final Liquid template.")
+
+    # 1. Check for the presence of Liquid placeholders. If none exist, the LLM likely failed.
+    if "{{" not in template_string:
+        error_msg = "Validation failed: No Liquid placeholders (e.g., '{{...}}') were found in the output. The LLM did not correctly inject dynamic content."
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    # 2. Attempt to parse the template, catching specific, known errors.
     try:
-        logger.info("Validating final Liquid template syntax.")
         Liquid(template_string)
-        logger.info("Liquid template syntax is valid.")
+        logger.info("Liquid template syntax appears valid.")
+    except Jinja2Exceptions.TemplateNotFound as e:
+        # This specific error happens when the parser mistakes raw HTML for a filename.
+        error_msg = f"Validation failed: The template content was misinterpreted as a file path ('{e}'). This usually happens when the content is raw HTML without valid Liquid tags."
+        logger.error(error_msg, exc_info=True)
+        raise ValueError(error_msg)
+    except (exceptions.LiquidSyntaxError, Jinja2Exceptions.TemplateSyntaxError) as e:
+        # This indicates a genuine syntax error in the Liquid/Jinja2 code.
+        error_msg = f"Validation failed: The template contains invalid Liquid syntax. Details: {e}"
+        logger.error(error_msg, exc_info=True)
+        raise ValueError(error_msg)
     except Exception as e:
-        logger.error(f"Liquid template validation failed: {e}", exc_info=True)
-        raise ValueError("The generated template has invalid Liquid syntax.")
+        # Catch any other unexpected errors during parsing.
+        error_msg = f"An unexpected error occurred during template validation: {e}"
+        logger.error(error_msg, exc_info=True)
+        raise ValueError(error_msg)
+
     logger.debug("Exiting _validate_liquid_template")
