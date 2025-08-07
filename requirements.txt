@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+requests
+liquidpy
+beautifulsoup4
+python-docx
+pdf2image
+pytesseract
+weasyprint
+psycopg2-binary
+numpy
+opencv-python-headless
+openai
