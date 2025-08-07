@@ -166,6 +166,11 @@ def inject_liquid_placeholders(html_content: str) -> str:
             print(f"Warning: Failed to decode JSON from chunk {i+1}. Skipping.", file=sys.stderr)
             continue
 
+        # Add a delay to avoid hitting the TPM rate limit
+        if i < len(text_chunks) - 1:
+            print("Waiting for 2 seconds to respect rate limits...")
+            time.sleep(2)
+
     print("Replacing text nodes with Liquid placeholders...")
     for text_node in soup.find_all(string=True):
         if text_node.strip() in full_replacement_map:
