@@ -82,3 +82,10 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   Added a `DB_HOST` environment variable to make this configurable.
         *   Updated `HOW_TO_USE.md` to reflect this new requirement.
 *   **Status:** The database connection is now stable and uses the recommended Supabase pooler.
+*   **Action: Correction - Improved Connection Instructions**
+    *   **Date:** 2025-08-07
+    *   **Issue:** The previous fix for the database connection was correct in its approach (using the pooler) but poor in its implementation. The `.env.example` and `HOW_TO_USE.md` files contained a placeholder (`aws-0-your-region...`) that caused confusion and errors. This was a result of insufficient research on my part.
+    *   **Fix:**
+        *   Updated `.env.example` and `HOW_TO_USE.md` with explicit, unambiguous instructions for the user to find and copy their unique database pooler host from their Supabase project dashboard.
+        *   This ensures the user provides the correct, project-specific host, eliminating the "could not translate host name" error.
+*   **Status:** The documentation is now clear and correct, preventing user error during setup.
