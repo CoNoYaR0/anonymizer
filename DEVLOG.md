@@ -1,3 +1,8 @@
+### Jules's Workstation
+*   **STATUS:** Active
+*   **NEXT TASK:** Implement the real CV content extraction logic in `src/content_extractor.py`. This involves using OCR for PDFs/images and `python-docx` for DOCX files, then sending the extracted text to the OpenAI API to get structured JSON data.
+
+---
 # Developer Log: CV Anonymizer Backend
 
 This document tracks the development progress, decisions made, and future roadmap for the CV Anonymizer backend project.
