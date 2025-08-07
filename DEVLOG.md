@@ -142,6 +142,14 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   It calls the OpenAI API and specifies a JSON response format.
         *   After receiving the map, it uses `BeautifulSoup` again to safely find and replace the text nodes with their corresponding Liquid placeholders, preserving the HTML structure.
 *   **Status:** The core AI feature of the template creation workflow is now fully implemented.
+*   **Action: Improved Scalability of AI Injection**
+    *   **Date:** 2025-08-07
+    *   **Issue:** The OpenAI API call was failing with a `rate_limit_exceeded` error for large documents, as the entire text content was being sent in a single request.
+    *   **Fix:**
+        *   Implemented a chunking mechanism in the `inject_liquid_placeholders` function.
+        *   The extracted text is now split into smaller chunks, and each chunk is sent to the OpenAI API in a separate request.
+        *   The resulting JSON maps are then merged before the final replacement step.
+*   **Status:** The AI injection process is now robust and can handle large documents without hitting API token limits.
 *   **Action: Refactor - Simplified DB Connection Logic**
     *   **Date:** 2025-08-07
     *   **Issue:** The previous fix for the database authentication was overly complex. It parsed the `SUPABASE_URL` to build the username dynamically, when a simpler solution was available.
