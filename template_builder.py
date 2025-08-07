@@ -8,7 +8,7 @@ import hashlib
 from typing import IO, Optional
 import httpx
 from openai import OpenAI
-from liquid import Liquid, exceptions
+import liquid
 from bs4 import BeautifulSoup
 from database import get_db_connection, release_db_connection
 from jinja2 import exceptions as Jinja2Exceptions
@@ -306,14 +306,14 @@ def _validate_liquid_template(template_string: str):
 
     # 2. Attempt to parse the template, catching specific, known errors.
     try:
-        Liquid(template_string)
+        liquid.Liquid(template_string)
         logger.info("Liquid template syntax appears valid.")
     except Jinja2Exceptions.TemplateNotFound as e:
         # This specific error happens when the parser mistakes raw HTML for a filename.
         error_msg = f"Validation failed: The template content was misinterpreted as a file path ('{e}'). This usually happens when the content is raw HTML without valid Liquid tags."
         logger.error(error_msg, exc_info=True)
         raise ValueError(error_msg)
-    except (exceptions.LiquidSyntaxError, Jinja2Exceptions.TemplateSyntaxError) as e:
+    except (liquid.error.LiquidSyntaxError, Jinja2Exceptions.TemplateSyntaxError) as e:
         # This indicates a genuine syntax error in the Liquid/Jinja2 code.
         error_msg = f"Validation failed: The template contains invalid Liquid syntax. Details: {e}"
         logger.error(error_msg, exc_info=True)
