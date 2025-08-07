@@ -2,6 +2,7 @@ import os
 import sys
 import psycopg2
 from psycopg2 import pool
+from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 from typing import Optional
 
@@ -13,14 +14,7 @@ connection_pool = None
 
 def _get_supabase_db_url() -> str:
     """
-    Constructs the PostgreSQL connection string from Supabase environment variables,
-    using the IPv4-compatible connection pooler.
-
-    Returns:
-        The full PostgreSQL DSN for the session pooler.
-
-    Raises:
-        ValueError: If any of the required Supabase environment variables are missing.
+    Constructs the PostgreSQL connection string from Supabase environment variables.
     """
     db_host = os.getenv("DB_HOST")
     db_user = os.getenv("DB_USER")
@@ -28,17 +22,16 @@ def _get_supabase_db_url() -> str:
 
     if not all([db_host, db_user, db_password]):
         raise ValueError(
-            "Missing one or more required Supabase database environment variables: "
-            "DB_HOST, DB_USER, DB_PASSWORD. Please check your .env file."
+            "Missing required Supabase database environment variables: "
+            "DB_HOST, DB_USER, DB_PASSWORD."
         )
 
-    # Use the session pooler connection string format for IPv4 compatibility
     return f"postgresql://{db_user}:{db_password}@{db_host}:6543/postgres"
 
 
 def initialize_connection_pool():
     """
-    Initializes the PostgreSQL connection pool using Supabase credentials.
+    Initializes the PostgreSQL connection pool.
     """
     global connection_pool
     if connection_pool:
@@ -48,15 +41,11 @@ def initialize_connection_pool():
         db_url = _get_supabase_db_url()
         print("Initializing database connection pool...")
         connection_pool = psycopg2.pool.SimpleConnectionPool(
-            minconn=1,
-            maxconn=10,
-            dsn=db_url
+            minconn=1, maxconn=10, dsn=db_url
         )
         print("Database connection pool initialized successfully.")
-    except (ValueError, psycopg2.OperationalError) as e:
-        print(f"Error: Could not connect to the database and initialize pool.", file=sys.stderr)
-        print(f"Please check your Supabase environment variables in the .env file.", file=sys.stderr)
-        print(f"Details: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"FATAL: Could not initialize database connection pool: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -81,29 +70,56 @@ def get_cached_html(file_hash: str) -> Optional[str]:
     """
     Retrieves cached HTML content from the database for a given file hash.
     """
-    # TODO: Implement the database query logic.
     conn = None
     try:
         conn = get_db_connection()
-        # Placeholder
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT html_content FROM html_cache WHERE hash = %s",
+                (file_hash,)
+            )
+            result = cursor.fetchone()
+            if result:
+                print(f"Cache hit for hash: {file_hash}")
+                return result[0]
+            else:
+                print(f"Cache miss for hash: {file_hash}")
+                return None
+    except Exception as e:
+        print(f"Error getting cached HTML: {e}", file=sys.stderr)
+        return None
     finally:
         if conn:
             release_db_connection(conn)
-    return None
 
 def cache_html(file_hash: str, html_content: str) -> None:
     """
     Saves new HTML content to the database cache.
+    Uses INSERT ... ON CONFLICT to prevent errors on duplicate entries.
     """
-    # TODO: Implement the database insertion logic.
     conn = None
     try:
         conn = get_db_connection()
-        # Placeholder
+        with conn.cursor() as cursor:
+            # Upsert operation: insert or update if the hash already exists
+            cursor.execute(
+                """
+                INSERT INTO html_cache (hash, html_content)
+                VALUES (%s, %s)
+                ON CONFLICT (hash) DO UPDATE SET
+                html_content = EXCLUDED.html_content;
+                """,
+                (file_hash, html_content)
+            )
+            conn.commit()
+            print(f"Successfully cached HTML for hash: {file_hash}")
+    except Exception as e:
+        print(f"Error caching HTML: {e}", file=sys.stderr)
+        if conn:
+            conn.rollback() # Roll back the transaction on error
     finally:
         if conn:
             release_db_connection(conn)
-    pass
 
 # Initialize the pool when the module is loaded
 initialize_connection_pool()

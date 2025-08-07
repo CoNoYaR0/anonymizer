@@ -94,6 +94,13 @@ The goal of this project is to create a backend service that can take a CV in PD
     *   **Issue:** After fixing the host, a new error `FATAL: Tenant or user not found` appeared.
     *   **Fix:** The connection pooler requires the username to be in the format `postgres.<project_ref>`. The code was hardcoding the user as `postgres`. I updated `src/database.py` to dynamically construct the correct username using the project reference ID from the `SUPABASE_URL`.
 *   **Status:** The database connection is now fully functional.
+*   **Action: Implemented Caching Logic**
+    *   **Date:** 2025-08-07
+    *   **Task:** Replace the placeholder `TODO`s in `src/database.py` with functional database logic.
+    *   **Implementation:**
+        *   Implemented the `get_cached_html` function to perform a `SELECT` query on the `html_cache` table.
+        *   Implemented the `cache_html` function to perform an `INSERT ... ON CONFLICT DO UPDATE` (upsert) operation, making the caching robust against duplicate file submissions.
+*   **Status:** The database caching layer is now fully implemented and operational.
 *   **Action: Refactor - Simplified DB Connection Logic**
     *   **Date:** 2025-08-07
     *   **Issue:** The previous fix for the database authentication was overly complex. It parsed the `SUPABASE_URL` to build the username dynamically, when a simpler solution was available.
