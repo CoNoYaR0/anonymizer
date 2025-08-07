@@ -4,7 +4,6 @@ import psycopg2
 from psycopg2 import pool
 from dotenv import load_dotenv
 from typing import Optional
-from urllib.parse import urlparse
 
 # Load environment variables at the module level
 load_dotenv()
@@ -14,28 +13,26 @@ connection_pool = None
 
 def _get_supabase_db_url() -> str:
     """
-    Constructs the PostgreSQL connection string from Supabase environment variables.
+    Constructs the PostgreSQL connection string from Supabase environment variables,
+    using the IPv4-compatible connection pooler.
 
     Returns:
-        The full PostgreSQL DSN.
+        The full PostgreSQL DSN for the session pooler.
 
     Raises:
         ValueError: If any of the required Supabase environment variables are missing.
     """
-    supabase_url = os.getenv("SUPABASE_URL")
+    db_host = os.getenv("DB_HOST")
     db_password = os.getenv("DB_PASSWORD")
 
-    if not all([supabase_url, db_password]):
+    if not all([db_host, db_password]):
         raise ValueError(
             "Missing one or more required Supabase environment variables: "
-            "SUPABASE_URL, DB_PASSWORD"
+            "DB_HOST, DB_PASSWORD. Please check your .env file."
         )
 
-    # The project reference is the subdomain in the Supabase URL
-    project_ref = urlparse(supabase_url).hostname.split('.')[0]
-
-    # Supabase PostgreSQL connection string format
-    return f"postgresql://postgres:{db_password}@db.{project_ref}.supabase.co:5432/postgres"
+    # Use the session pooler connection string format for IPv4 compatibility
+    return f"postgresql://postgres:{db_password}@{db_host}:6543/postgres"
 
 
 def initialize_connection_pool():
@@ -68,7 +65,6 @@ def get_db_connection():
     Gets a connection from the pool.
     """
     if connection_pool is None:
-        # This should ideally not be hit if startup event is handled correctly
         initialize_connection_pool()
     return connection_pool.getconn()
 
@@ -80,6 +76,7 @@ def release_db_connection(conn):
         connection_pool.putconn(conn)
 
 # --- Caching Logic ---
+# (The rest of the file remains the same)
 
 def get_cached_html(file_hash: str) -> Optional[str]:
     """
@@ -111,6 +108,5 @@ def cache_html(file_hash: str, html_content: str) -> None:
             release_db_connection(conn)
     pass
 
-# Initialize the pool when the module is loaded for simplicity.
-# FastAPI startup event will ensure it's ready.
+# Initialize the pool when the module is loaded
 initialize_connection_pool()
