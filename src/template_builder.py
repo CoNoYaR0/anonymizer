@@ -1,6 +1,7 @@
 import os
 import hashlib
 import requests
+import time
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -15,25 +16,18 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 def _calculate_file_hash(file_content: bytes) -> str:
     """
     Calculates the SHA-256 hash of the file content.
-
-    Args:
-        file_content: The binary content of the file.
-
-    Returns:
-        The hex digest of the SHA-256 hash.
     """
-    # TODO: Implement the hashing logic.
     sha256_hash = hashlib.sha256()
     sha256_hash.update(file_content)
     return sha256_hash.hexdigest()
 
 
-def _convert_docx_to_html(file_path: str) -> str:
+def _convert_docx_to_html(file_content: bytes) -> str:
     """
-    Converts a DOCX file to HTML using the Convertio API.
+    Converts DOCX file content to HTML using the Convertio API.
 
     Args:
-        file_path: The path to the DOCX file.
+        file_content: The binary content of the DOCX file.
 
     Returns:
         The converted HTML content as a string.
@@ -44,79 +38,77 @@ def _convert_docx_to_html(file_path: str) -> str:
     if not CONVERTIO_API_KEY:
         raise Exception("CONVERTIO_API_KEY is not set.")
 
-    # TODO: Implement the full Convertio API workflow.
-    # 1. Upload the file to Convertio.
-    # 2. Start the conversion process.
-    # 3. Poll for completion status.
-    # 4. Download the resulting HTML content.
+    # Step 1: Start a new conversion
+    start_response = requests.post(
+        "https://api.convertio.co/convert",
+        json={"apikey": CONVERTIO_API_KEY, "input": "upload", "outputformat": "html"}
+    )
+    start_response.raise_for_status()
+    conv_data = start_response.json()["data"]
+    conv_id = conv_data["id"]
+    upload_url = conv_data["upload_url"]
 
-    print(f"TODO: Calling Convertio API to convert {file_path}")
+    # Step 2: Upload the file content
+    with open("temp_for_convertio.docx", "wb") as f:
+        f.write(file_content)
 
-    # Placeholder return value
-    return "<html><body><h1>Placeholder HTML</h1><p>This is content from a DOCX.</p></body></html>"
+    with open("temp_for_convertio.docx", "rb") as f:
+        upload_response = requests.put(upload_url, data=f)
+
+    os.remove("temp_for_convertio.docx")
+    upload_response.raise_for_status()
+
+    # Step 3: Poll for conversion status
+    while True:
+        status_response = requests.get(f"https://api.convertio.co/convert/{conv_id}/status")
+        status_response.raise_for_status()
+        status_data = status_response.json()["data"]
+
+        if status_data["step"] == "finish":
+            html_url = status_data["output"]["url"]
+            break
+        elif status_data["step"] == "error":
+            raise Exception(f"Convertio API error: {status_data['step_percent']} - {status_data.get('error')}")
+
+        print(f"Conversion in progress: {status_data['step']} ({status_data['step_percent']}%)")
+        time.sleep(2) # Wait 2 seconds before polling again
+
+    # Step 4: Download the resulting HTML
+    html_response = requests.get(html_url)
+    html_response.raise_for_status()
+
+    return html_response.text
 
 
 def _inject_liquid_placeholders(html_content: str) -> str:
     """
     Uses an LLM to intelligently replace static text in HTML with Liquid placeholders.
-
-    Args:
-        html_content: The HTML string to process.
-
-    Returns:
-        An HTML string with Liquid placeholders (e.g., {{ name }}) injected.
-
-    Raises:
-        Exception: If the OpenAI API key is missing.
     """
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is not set.")
 
     # TODO: Implement the LLM processing logic.
-    # 1. Use BeautifulSoup to parse the HTML and extract text nodes.
-    # 2. Construct a prompt for the LLM (e.g., GPT-4o) asking it to identify
-    #    which pieces of text are dynamic data (like names, dates, job titles)
-    #    and suggest appropriate Liquid variable names.
-    # 3. Parse the LLM's response.
-    # 4. Use BeautifulSoup again to replace the original text nodes with the
-    #    corresponding Liquid placeholders, ensuring the HTML structure remains intact.
-
     print("TODO: Calling OpenAI API to inject Liquid placeholders.")
-
-    # Placeholder return value
     return html_content.replace("Placeholder HTML", "<h1>{{ document_title }}</h1>")
 
 
-def create_template_from_docx(file_path: str, file_content: bytes) -> str:
+def create_template_from_docx(file_name: str, file_content: bytes) -> str:
     """
     Orchestrates the full workflow for creating a template from a DOCX file.
-
-    Args:
-        file_path: The path to the uploaded DOCX file.
-        file_content: The binary content of the DOCX file.
-
-    Returns:
-        The final HTML/Liquid template as a string.
     """
-    # 1. Calculate the file hash
     file_hash = _calculate_file_hash(file_content)
-    print(f"Calculated hash for {file_path}: {file_hash}")
+    print(f"Calculated hash for {file_name}: {file_hash}")
 
-    # 2. Check the cache
     cached_html = database.get_cached_html(file_hash)
     if cached_html:
         print("Found pre-converted HTML in cache.")
         html_content = cached_html
     else:
         print("HTML not in cache. Converting with Convertio...")
-        # 3. If not cached, convert the DOCX to HTML
-        html_content = _convert_docx_to_html(file_path)
-
-        # 4. Cache the newly converted HTML
+        html_content = _convert_docx_to_html(file_content)
         database.cache_html(file_hash, html_content)
         print("Saved new HTML to cache.")
 
-    # 5. Inject Liquid placeholders into the HTML
     print("Injecting Liquid placeholders...")
     liquid_template = _inject_liquid_placeholders(html_content)
 
