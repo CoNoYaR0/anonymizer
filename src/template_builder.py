@@ -5,7 +5,7 @@ import time
 import sys
 import base64
 import json
-from typing import Optional, List
+from typing import Optional, Dict
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup, NavigableString
 from openai import OpenAI
@@ -103,78 +103,81 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
         print(f"FATAL: An unexpected error occurred in convert_docx_to_html_and_cache: {e}", file=sys.stderr)
         raise e
 
-def _create_text_chunks(text_nodes: List[str], max_chars: int = 15000) -> List[List[str]]:
-    """Groups a list of text strings into chunks below a max character limit."""
-    chunks = []
-    current_chunk = []
-    current_length = 0
-    for text in text_nodes:
-        if current_length + len(text) > max_chars:
-            chunks.append(current_chunk)
-            current_chunk = []
-            current_length = 0
-        current_chunk.append(text)
-        current_length += len(text)
-    if current_chunk:
-        chunks.append(current_chunk)
-    return chunks
+
+def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
+    """Sends the ID-to-text map to the AI and gets back an ID-to-Liquid map."""
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
+    prompt = f"""
+    You are a templating expert. Your task is to analyze the following JSON object, which maps unique IDs to text content from an HTML document.
+    Create a new JSON object that maps the same IDs to appropriate Liquid placeholders for any text that appears to be dynamic data (names, dates, job titles, etc.).
+
+    Guidelines:
+    - If a text value is dynamic, create a logical Liquid variable for it (e.g., "{{{{ candidate.name }}}}", "{{{{ experience.title }}}}").
+    - If a text value appears to be a static label (e.g., "Experience", "Education"), **exclude its ID** from the final JSON object.
+    - The keys in the returned JSON must be the original IDs.
+    - Ensure the output is ONLY a valid JSON object.
+
+    Here is the ID-to-text map to analyze:
+    {json.dumps(id_to_text_map, indent=2)}
+
+    Return the JSON object mapping IDs to Liquid placeholders now.
+    """
+
+    print("Calling OpenAI API to get placeholder map...")
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"}
+    )
+
+    response_content = response.choices[0].message.content
+    print(f"DEBUG: OpenAI response: {response_content}")
+
+    try:
+        return json.loads(response_content)
+    except json.JSONDecodeError:
+        raise Exception("Failed to decode JSON from OpenAI response.")
+
 
 def inject_liquid_placeholders(html_content: str) -> str:
     """
-    Uses an LLM to intelligently replace static text in HTML with Liquid placeholders.
-    Handles large documents by chunking the text sent to the API.
+    Uses a token-efficient, ID-based hybrid approach to inject Liquid placeholders.
     """
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is not set.")
 
-    print("Parsing HTML with BeautifulSoup...")
+    print("Parsing HTML and preparing for AI injection...")
     soup = BeautifulSoup(html_content, "html.parser")
 
-    text_nodes = [text for text in soup.find_all(string=True) if text.strip()]
-    text_chunks = _create_text_chunks(text_nodes)
-
-    client = OpenAI(api_key=OPENAI_API_KEY)
-    full_replacement_map = {}
-
-    print(f"Processing {len(text_chunks)} chunks for OpenAI API...")
-    for i, chunk in enumerate(text_chunks):
-        print(f"Processing chunk {i+1}/{len(text_chunks)}...")
-        prompt = f"""
-        You are a templating expert. Your task is to analyze the following text content and convert it into a valid JSON object that maps original text to a Liquid placeholder.
-        Guidelines:
-        - Identify dynamic data (names, dates, job titles, etc.).
-        - Map this dynamic text to a logical Liquid variable (e.g., "{{{{ candidate.name }}}}").
-        - Do NOT include static labels (e.g., "Experience", "Education") in the JSON.
-        - The JSON keys must be the EXACT original text.
-        - Ensure the output is ONLY a valid JSON object.
-        Text to analyze:
-        {json.dumps(chunk, indent=2)}
-        Return the JSON object now.
-        """
-
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"}
-        )
-        response_content = response.choices[0].message.content
-
-        try:
-            chunk_map = json.loads(response_content)
-            full_replacement_map.update(chunk_map)
-        except json.JSONDecodeError:
-            print(f"Warning: Failed to decode JSON from chunk {i+1}. Skipping.", file=sys.stderr)
-            continue
-
-        # Add a delay to avoid hitting the TPM rate limit
-        if i < len(text_chunks) - 1:
-            print("Waiting for 2 seconds to respect rate limits...")
-            time.sleep(2)
-
-    print("Replacing text nodes with Liquid placeholders...")
+    # 1. Add unique IDs to all text nodes and create an ID-to-text map
+    id_to_text_map = {}
+    node_counter = 0
     for text_node in soup.find_all(string=True):
-        if text_node.strip() in full_replacement_map:
-            new_content = full_replacement_map[text_node.strip()]
-            text_node.replace_with(NavigableString(new_content))
+        if text_node.strip() and not isinstance(text_node.parent, (BeautifulSoup, NavigableString)) and text_node.parent.name not in ['style', 'script']:
+            node_id = f"liquid-node-{node_counter}"
+            id_to_text_map[node_id] = text_node.strip()
+            text_node.parent[f"data-liquid-id"] = node_id
+            node_counter += 1
+
+    if not id_to_text_map:
+        print("No text nodes found to process.")
+        return str(soup)
+
+    # 2. Get the replacement map from the AI
+    id_to_liquid_map = _get_ai_replacement_map(id_to_text_map)
+
+    # 3. Replace content and remove IDs
+    print("Replacing content with Liquid placeholders...")
+    for node_id, liquid_variable in id_to_liquid_map.items():
+        element = soup.find(attrs={f"data-liquid-id": node_id})
+        if element:
+            # Clear the element and add the new Liquid variable
+            element.clear()
+            element.append(NavigableString(liquid_variable))
+
+    # 4. Clean up all the data-liquid-id attributes
+    for element in soup.find_all(attrs={"data-liquid-id": True}):
+        del element["data-liquid-id"]
 
     return str(soup)

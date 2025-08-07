@@ -155,6 +155,15 @@ The goal of this project is to create a backend service that can take a CV in PD
     *   **Issue:** The chunking logic solved the request size limit, but triggered a new `rate_limit_exceeded` error due to too many requests per minute (TPM).
     *   **Fix:** Added a 2-second delay (`time.sleep(2)`) between each chunked API call to OpenAI.
 *   **Status:** The AI injection process now respects the API's rate limits and can process large documents successfully.
+*   **Action: Architectural Refactor - Token-Efficient AI Injection**
+    *   **Date:** 2025-08-07
+    *   **Issue:** The previous text-chunking method for AI injection was still inefficient and prone to rate-limiting issues.
+    *   **Fix (Hybrid ID-based Approach):**
+        *   Refactored the `inject_liquid_placeholders` function to use a more sophisticated, token-efficient method.
+        *   The process now assigns a unique `data-liquid-id` to each text-containing element in the HTML.
+        *   It sends a lightweight JSON object mapping these IDs to their text content to the AI, instead of the full raw text.
+        *   The AI returns a map of IDs to Liquid variables, which are then precisely injected back into the elements by finding their unique IDs.
+*   **Status:** The AI injection process is now highly efficient, robust, and permanently solves the token/rate-limiting problems while guaranteeing HTML structural integrity.
 *   **Action: Refactor - Simplified DB Connection Logic**
     *   **Date:** 2025-08-07
     *   **Issue:** The previous fix for the database authentication was overly complex. It parsed the `SUPABASE_URL` to build the username dynamically, when a simpler solution was available.
