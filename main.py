@@ -1,9 +1,10 @@
+# Load environment variables from .env file FIRST.
+# This is critical to ensure all modules have access to environment variables when they are imported.
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
+
 import logger_config # Import to configure logging
 import logging
-from dotenv import load_dotenv, find_dotenv
-
-# Load environment variables from .env file.
-load_dotenv(find_dotenv())
 
 import os
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
