@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>CV</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0;">
+    <div style="padding: 20px;">
+        <div style="border: 1px solid #000; padding: 10px; margin-bottom: 20px;">
+            <h1 style="color: red; margin: 0;">{{ name }}</h1>
+            <h2 style="color: red; margin: 0;">{{ title }}</h2>
+            <p style="margin: 0;">10 ans d’expériences<br>Mission au sein de <strong>{{ job.company }}</strong></p>
+        </div>
+        <div style="background-color: red; color: white; padding: 10px; text-align: center; margin-bottom: 20px;">
+            <h2 style="margin: 0;">Formation et Certifications</h2>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <tr>
+                <th style="border: 1px solid #ddd; padding: 8px;">DATE</th>
+                <th style="border: 1px solid #ddd; padding: 8px;">FORMATIONS & CERTIFICATIONS</th>
+                <th style="border: 1px solid #ddd; padding: 8px;">ÉCOLE / FC</th>
+            </tr>
+            {% for edu in educations %}
+            <tr>
+                <td style="border: 1px solid #ddd; padding: 8px;">{{ edu.date }}</td>
+                <td style="border: 1px solid #ddd; padding: 8px;">{{ edu.title }}</td>
+                <td style="border: 1px solid #ddd; padding: 8px;">{{ edu.school }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+        <div style="background-color: red; color: white; padding: 10px; text-align: center; margin-bottom: 20px;">
+            <h2 style="margin: 0;">COMPÉTENCES TECHNIQUES ET FONCTIONNELLES</h2>
+        </div>
+        <div style="margin-bottom: 20px;">
+            {% for category, tools in skills.items() %}
+            <p><strong>{{ category }} :</strong> {{ tools }}</p>
+            {% endfor %}
+        </div>
+        <div style="background-color: red; color: white; padding: 10px; text-align: center; margin-bottom: 20px;">
+            <h2 style="margin: 0;">EXPÉRIENCES PROFESSIONNELLES</h2>
+        </div>
+        <div style="margin-bottom: 20px;">
+            {% for job in experiences %}
+            <ul style="list-style-type: none; padding: 0;">
+                <li>▪ {{ job.title }}</li>
+                <li>▪ {{ job.company }}, {{ job.location }}</li>
+            </ul>
+            <ul style="list-style-type: none; padding: 0;">
+                <li>▪ {{ job.start_date }}</li>
+                <li>▪ {{ job.end_date }}</li>
+            </ul>
+            <h3>CONTEXTE :</h3>
+            <p>{{ job.context }}</p>
+            <h3>MISSIONS :</h3>
+            <ul>
+                {% for mission in job.missions %}
+                <li>{{ mission }}</li>
+                {% endfor %}
+            </ul>
+        
