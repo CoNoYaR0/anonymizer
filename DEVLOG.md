@@ -109,6 +109,13 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   Implemented the `download_file_from_storage` function to retrieve file content from a bucket.
         *   Handled a limitation in the `supabase-py` library by temporarily saving file bytes to disk before uploading.
 *   **Status:** The file storage layer is now fully implemented and operational.
+*   **Action: Implemented Convertio API Integration**
+    *   **Date:** 2025-08-07
+    *   **Task:** Replace the placeholder `TODO` in `template_builder._convert_docx_to_html` with a functional implementation.
+    *   **Implementation:**
+        *   Implemented the full, multi-step Convertio API workflow: start conversion, upload file, poll for status, and download the resulting HTML.
+        *   The function now takes file bytes as input and handles the temporary file creation required for the API call.
+*   **Status:** The DOCX-to-HTML conversion pipeline is now fully functional.
 *   **Action: Refactor - Simplified DB Connection Logic**
     *   **Date:** 2025-08-07
     *   **Issue:** The previous fix for the database authentication was overly complex. It parsed the `SUPABASE_URL` to build the username dynamically, when a simpler solution was available.
