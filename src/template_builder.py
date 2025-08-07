@@ -5,7 +5,7 @@ import time
 import sys
 import base64
 import json
-from typing import Optional
+from typing import Optional, List
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup, NavigableString
 from openai import OpenAI
@@ -103,9 +103,26 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
         print(f"FATAL: An unexpected error occurred in convert_docx_to_html_and_cache: {e}", file=sys.stderr)
         raise e
 
+def _create_text_chunks(text_nodes: List[str], max_chars: int = 15000) -> List[List[str]]:
+    """Groups a list of text strings into chunks below a max character limit."""
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    for text in text_nodes:
+        if current_length + len(text) > max_chars:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_length = 0
+        current_chunk.append(text)
+        current_length += len(text)
+    if current_chunk:
+        chunks.append(current_chunk)
+    return chunks
+
 def inject_liquid_placeholders(html_content: str) -> str:
     """
     Uses an LLM to intelligently replace static text in HTML with Liquid placeholders.
+    Handles large documents by chunking the text sent to the API.
     """
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is not set.")
@@ -113,47 +130,46 @@ def inject_liquid_placeholders(html_content: str) -> str:
     print("Parsing HTML with BeautifulSoup...")
     soup = BeautifulSoup(html_content, "html.parser")
 
-    # 1. Extract all non-empty text nodes
     text_nodes = [text for text in soup.find_all(string=True) if text.strip()]
+    text_chunks = _create_text_chunks(text_nodes)
 
-    # 2. Construct the prompt for the AI
-    prompt = f"""
-    You are a templating expert. Your task is to analyze the following text content extracted from an HTML document and convert it into a valid JSON object that maps the original text to a Liquid placeholder.
-
-    Guidelines:
-    - Identify which pieces of text are dynamic data (e.g., names, dates, job titles, descriptions).
-    - Map this dynamic text to a logical Liquid variable (e.g., "{{{{ candidate.name }}}}", "{{{{ experience.title }}}}").
-    - Text that appears to be a static label (e.g., "Experience", "Education", "Skills") should NOT be included in the final JSON.
-    - The JSON keys must be the EXACT original text, and the values must be the Liquid placeholders.
-    - Ensure the output is ONLY a valid JSON object.
-
-    Here is the text content to analyze:
-    {json.dumps(text_nodes, indent=2)}
-
-    Return the JSON object now.
-    """
-
-    print("Calling OpenAI API to get placeholder map...")
     client = OpenAI(api_key=OPENAI_API_KEY)
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"}
-    )
+    full_replacement_map = {}
 
-    response_content = response.choices[0].message.content
-    print(f"DEBUG: OpenAI response: {response_content}")
+    print(f"Processing {len(text_chunks)} chunks for OpenAI API...")
+    for i, chunk in enumerate(text_chunks):
+        print(f"Processing chunk {i+1}/{len(text_chunks)}...")
+        prompt = f"""
+        You are a templating expert. Your task is to analyze the following text content and convert it into a valid JSON object that maps original text to a Liquid placeholder.
+        Guidelines:
+        - Identify dynamic data (names, dates, job titles, etc.).
+        - Map this dynamic text to a logical Liquid variable (e.g., "{{{{ candidate.name }}}}").
+        - Do NOT include static labels (e.g., "Experience", "Education") in the JSON.
+        - The JSON keys must be the EXACT original text.
+        - Ensure the output is ONLY a valid JSON object.
+        Text to analyze:
+        {json.dumps(chunk, indent=2)}
+        Return the JSON object now.
+        """
 
-    try:
-        replacement_map = json.loads(response_content)
-    except json.JSONDecodeError:
-        raise Exception("Failed to decode JSON from OpenAI response.")
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        response_content = response.choices[0].message.content
 
-    # 3. Replace the text in the soup object
+        try:
+            chunk_map = json.loads(response_content)
+            full_replacement_map.update(chunk_map)
+        except json.JSONDecodeError:
+            print(f"Warning: Failed to decode JSON from chunk {i+1}. Skipping.", file=sys.stderr)
+            continue
+
     print("Replacing text nodes with Liquid placeholders...")
     for text_node in soup.find_all(string=True):
-        if text_node.strip() in replacement_map:
-            new_content = replacement_map[text_node.strip()]
+        if text_node.strip() in full_replacement_map:
+            new_content = full_replacement_map[text_node.strip()]
             text_node.replace_with(NavigableString(new_content))
 
     return str(soup)
