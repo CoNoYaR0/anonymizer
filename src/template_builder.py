@@ -44,7 +44,9 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
             json={"apikey": CONVERTIO_API_KEY, "input": "upload", "outputformat": "html"}
         )
         start_response.raise_for_status()
-        conv_data = start_response.json()["data"]
+        response_json = start_response.json()
+        print(f"DEBUG: Convertio start response: {response_json}") # DEBUG LOGGING
+        conv_data = response_json["data"]
         conv_id = conv_data["id"]
         upload_url = conv_data["upload_url"]
 
