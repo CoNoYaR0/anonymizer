@@ -1,5 +1,16 @@
 # Agent Instructions for CV Anonymizer & Templating Engine
 
+---
+## ⚠️ Core Directives ⚠️
+### **1. NO ASSUMPTIONS. VERIFY EVERYTHING.**
+- **This is the most important rule.** Do not assume how a library works, what a variable contains, or how a configuration is structured.
+- **You MUST verify all external factors.** This includes:
+    - Reading the documentation for third-party library functions and their expected exceptions.
+    - Checking environment variables and handling cases where they might be missing.
+    - Directly testing functionality in isolation if its behavior is not 100% certain.
+- **Guessing is not permitted.** A wrong assumption can lead to critical failures. The time spent verifying is always less than the time spent fixing a bug caused by a guess.
+---
+
 This document provides the strategic and technical blueprint for this project. Its purpose is to guide an AI software engineer (like Jules) through the architecture, data flows, and evolution of the system.
 
 ## 1. High-Level Objective
