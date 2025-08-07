@@ -101,6 +101,14 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   Implemented the `get_cached_html` function to perform a `SELECT` query on the `html_cache` table.
         *   Implemented the `cache_html` function to perform an `INSERT ... ON CONFLICT DO UPDATE` (upsert) operation, making the caching robust against duplicate file submissions.
 *   **Status:** The database caching layer is now fully implemented and operational.
+*   **Action: Implemented Supabase Storage Logic**
+    *   **Date:** 2025-08-07
+    *   **Task:** Replace the placeholder `TODO`s in `src/storage.py` with functional Supabase Storage logic.
+    *   **Implementation:**
+        *   Implemented the `upload_file_to_storage` function to upload files to a specified bucket and return a public URL.
+        *   Implemented the `download_file_from_storage` function to retrieve file content from a bucket.
+        *   Handled a limitation in the `supabase-py` library by temporarily saving file bytes to disk before uploading.
+*   **Status:** The file storage layer is now fully implemented and operational.
 *   **Action: Refactor - Simplified DB Connection Logic**
     *   **Date:** 2025-08-07
     *   **Issue:** The previous fix for the database authentication was overly complex. It parsed the `SUPABASE_URL` to build the username dynamically, when a simpler solution was available.
