@@ -12,3 +12,4 @@ psycopg2-binary
 numpy
 opencv-python-headless
 openai
+supabase
