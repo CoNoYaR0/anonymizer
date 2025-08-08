@@ -125,16 +125,16 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
     logger.debug(f"Generated prompt: {prompt}")
 
     # 3. Call the new model
-    logger.info("Step 3/3: Calling GPT-5.1 API to get placeholder map...")
+    logger.info("Step 3/3: Calling GPT-5 API to get placeholder map...")
     client = OpenAI(api_key=OPENAI_API_KEY)
     response = client.chat.completions.create(
-        model="gpt-5.1",  # Switched to the new model
+        model="gpt-5",  # Switched to the new model
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"}
     )
 
     response_content = response.choices[0].message.content
-    logger.debug(f"GPT-5.1 response: {response_content}")
+    logger.debug(f"GPT-5 response: {response_content}")
 
     try:
         return json.loads(response_content)
