@@ -5,10 +5,18 @@ from fastapi.responses import StreamingResponse, RedirectResponse, JSONResponse
 from typing import Annotated
 import io
 import uuid
+from dotenv import load_dotenv
 
 # --- Logging Configuration ---
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Load environment variables to get the DEBUG flag
+load_dotenv()
+
+# Set logging level based on the DEBUG environment variable
+log_level = logging.DEBUG if os.getenv("DEBUG") == "True" else logging.INFO
+logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+logger.info(f"Logging initialized with level: {logging.getLevelName(log_level)}")
 
 # Import the core logic modules
 from . import template_builder
