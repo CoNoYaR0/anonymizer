@@ -23,19 +23,20 @@ log_config = {
         },
     },
     "loggers": {
-        "src": {
+        "src": {  # This will catch logs from all modules in the 'src' package
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
         },
     },
-    "root": {
+    "root": {  # Catch all other loggers, including uvicorn.access
         "handlers": ["console"],
         "level": "INFO",
     },
 }
 dictConfig(log_config)
-logger = logging.getLogger("src")
+# It's important to get the logger after the config is applied
+logger = logging.getLogger(__name__)
 
 # Import the core logic modules
 from . import template_builder
