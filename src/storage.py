@@ -1,11 +1,13 @@
 import os
 import sys
+import logging
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from typing import Optional
 
 # Load environment variables
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 # --- Supabase Client Initialization ---
 supabase_url: Optional[str] = os.getenv("SUPABASE_URL")
@@ -21,15 +23,15 @@ def initialize_supabase_client():
         return
 
     if not all([supabase_url, supabase_key]):
-        print("Error: Supabase URL or Key is not set in environment variables.", file=sys.stderr)
+        logger.critical("Supabase URL or Key is not set in environment variables.")
         sys.exit(1)
 
     try:
-        print("Initializing Supabase client...")
+        logger.info("Initializing Supabase client...")
         supabase_client = create_client(supabase_url, supabase_key)
-        print("Supabase client initialized successfully.")
+        logger.info("Supabase client initialized successfully.")
     except Exception as e:
-        print(f"Failed to initialize Supabase client: {e}", file=sys.stderr)
+        logger.critical(f"Failed to initialize Supabase client: {e}", exc_info=True)
         sys.exit(1)
 
 def get_supabase_client() -> Client:
@@ -64,6 +66,7 @@ def upload_file_to_storage(bucket_name: str, file_path: str, file_content: bytes
         with open(temp_file_path, "wb") as f:
             f.write(file_content)
 
+        logger.info(f"Uploading {file_path} to Supabase bucket {bucket_name}...")
         client.storage.from_(bucket_name).upload(
             path=file_path,
             file=temp_file_path,
@@ -73,11 +76,11 @@ def upload_file_to_storage(bucket_name: str, file_path: str, file_content: bytes
         os.remove(temp_file_path) # Clean up the temporary file
 
         public_url = client.storage.from_(bucket_name).get_public_url(file_path)
-        print(f"Successfully uploaded {file_path} to bucket {bucket_name}. URL: {public_url}")
+        logger.info(f"Successfully uploaded {file_path} to bucket {bucket_name}. URL: {public_url}")
         return public_url
 
     except Exception as e:
-        print(f"Error uploading file to Supabase: {e}", file=sys.stderr)
+        logger.error(f"Error uploading file to Supabase: {e}", exc_info=True)
         # Clean up temp file on error as well
         if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
@@ -97,11 +100,12 @@ def download_file_from_storage(bucket_name: str, file_path: str) -> bytes:
     """
     try:
         client = get_supabase_client()
+        logger.info(f"Downloading {file_path} from Supabase bucket {bucket_name}...")
         response = client.storage.from_(bucket_name).download(file_path)
-        print(f"Successfully downloaded {file_path} from bucket {bucket_name}.")
+        logger.info(f"Successfully downloaded {file_path} from bucket {bucket_name}.")
         return response
     except Exception as e:
-        print(f"Error downloading file from Supabase: {e}", file=sys.stderr)
+        logger.error(f"Error downloading file from Supabase: {e}", exc_info=True)
         raise e
 
 

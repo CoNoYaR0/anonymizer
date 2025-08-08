@@ -1,9 +1,14 @@
 import os
+import logging
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body
 from fastapi.responses import StreamingResponse, RedirectResponse, JSONResponse
 from typing import Annotated
 import io
 import uuid
+
+# --- Logging Configuration ---
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Import the core logic modules
 from . import template_builder
@@ -77,7 +82,7 @@ async def generate_template_from_docx(file: UploadFile = File(...)):
         )
     except Exception as e:
         # Log the exception for debugging
-        print(f"Error in /templates/generate-from-docx: {e}")
+        logger.error(f"Error in /templates/generate-from-docx: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
 

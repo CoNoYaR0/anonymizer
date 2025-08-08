@@ -6,8 +6,11 @@ import sys
 import base64
 import json
 import re
+import logging
 from typing import Optional, Dict, List, Any, Tuple
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 from bs4 import BeautifulSoup, NavigableString
 from openai import OpenAI
 
@@ -31,20 +34,20 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
     Checks cache for HTML. If not found, converts DOCX to HTML via Convertio and caches it.
     """
     file_hash = _calculate_file_hash(file_content)
-    print(f"Calculated hash: {file_hash}")
+    logger.info(f"Calculated hash: {file_hash}")
 
     cached_html = database.get_cached_html(file_hash)
     if cached_html:
-        print("Found pre-converted HTML in cache.")
+        logger.info("Found pre-converted HTML in cache.")
         return cached_html
 
-    print("HTML not in cache. Converting with Convertio...")
+    logger.info("HTML not in cache. Converting with Convertio...")
     if not CONVERTIO_API_KEY:
         raise Exception("CONVERTIO_API_KEY is not set.")
 
     try:
         # Step 1: Start conversion using Base64 upload
-        print("Step 1/3: Starting Convertio conversion with Base64 upload...")
+        logger.info("Step 1/3: Starting Convertio conversion with Base64 upload...")
         encoded_file = base64.b64encode(file_content).decode('ascii')
 
         start_response = requests.post(
@@ -59,7 +62,7 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
         )
         start_response.raise_for_status()
         response_json = start_response.json()
-        print(f"DEBUG: Convertio start response: {response_json}")
+        logger.debug(f"Convertio start response: {response_json}")
 
         if response_json.get('error'):
              raise Exception(f"Convertio API Error on start: {response_json['error']}")
@@ -67,7 +70,7 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
         conv_id = response_json["data"]["id"]
 
         # Step 2: Poll for conversion status
-        print("Step 2/3: Polling for conversion status...")
+        logger.info("Step 2/3: Polling for conversion status...")
         while True:
             status_response = requests.get(f"https://api.convertio.co/convert/{conv_id}/status")
             status_response.raise_for_status()
@@ -79,29 +82,29 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
             elif status_data["step"] == "error":
                 raise Exception(f"Convertio API error during conversion: {status_data.get('error')}")
 
-            print(f"Conversion in progress: {status_data['step']}...")
+            logger.info(f"Conversion in progress: {status_data['step']}...")
             time.sleep(2)
 
         # Step 3: Download the resulting HTML
-        print("Step 3/3: Downloading converted HTML...")
+        logger.info("Step 3/3: Downloading converted HTML...")
         html_response = requests.get(html_url)
         html_response.raise_for_status()
         html_content = html_response.text
 
         # Cache the new HTML
         database.cache_html(file_hash, html_content)
-        print("Saved new HTML to cache.")
+        logger.info("Saved new HTML to cache.")
 
         return html_content
 
     except requests.exceptions.RequestException as e:
-        print(f"FATAL: An error occurred during Convertio API request: {e}", file=sys.stderr)
+        logger.error(f"An error occurred during Convertio API request: {e}", exc_info=True)
         if e.response is not None:
-            print(f"Response Status Code: {e.response.status_code}", file=sys.stderr)
-            print(f"Response Body: {e.response.text}", file=sys.stderr)
+            logger.error(f"Response Status Code: {e.response.status_code}")
+            logger.error(f"Response Body: {e.response.text}")
         raise e
     except Exception as e:
-        print(f"FATAL: An unexpected error occurred in convert_docx_to_html_and_cache: {e}", file=sys.stderr)
+        logger.error(f"An unexpected error occurred in convert_docx_to_html_and_cache: {e}", exc_info=True)
         raise e
 
 
@@ -285,18 +288,18 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     # 1. Classification par regex
-    print("Annotating text map with regex...")
+    logger.info("Annotating text map with regex...")
     annotations = annotate_map(id_to_text_map)
 
     # 2. Construire le prompt pour GPT-5
-    print("Building prompt for GPT-5...")
+    logger.info("Building prompt for GPT-5...")
     prompt = build_prompt(
         id_to_text_map=id_to_text_map,
         annotations=annotations
     )
 
     # 3. Appel à GPT-5
-    print("Calling OpenAI API to get placeholder map...")
+    logger.info("Calling OpenAI API to get placeholder map...")
     response = client.chat.completions.create(
         model="gpt-5",
         messages=[{"role": "user", "content": prompt}],
@@ -304,11 +307,12 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
     )
 
     response_content = response.choices[0].message.content
-    print(f"DEBUG: OpenAI response: {response_content}")
+    logger.debug(f"OpenAI response: {response_content}")
 
     try:
         return json.loads(response_content)
     except json.JSONDecodeError:
+        logger.error("Failed to decode JSON from OpenAI response.", exc_info=True)
         raise Exception("Failed to decode JSON from OpenAI response.")
 
 
@@ -319,7 +323,7 @@ def inject_liquid_placeholders(html_content: str) -> str:
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is not set.")
 
-    print("Parsing HTML and preparing for AI injection...")
+    logger.info("Parsing HTML and preparing for AI injection...")
     soup = BeautifulSoup(html_content, "html.parser")
 
     # 1. Add unique IDs to all text nodes and create an ID-to-text map
@@ -333,14 +337,14 @@ def inject_liquid_placeholders(html_content: str) -> str:
             node_counter += 1
 
     if not id_to_text_map:
-        print("No text nodes found to process.")
+        logger.warning("No text nodes found to process in inject_liquid_placeholders.")
         return str(soup)
 
     # 2. Get the replacement map from the AI
     id_to_liquid_map = _get_ai_replacement_map(id_to_text_map)
 
     # 3. Replace content and remove IDs
-    print("Replacing content with Liquid placeholders...")
+    logger.info("Replacing content with Liquid placeholders...")
     for node_id, liquid_variable in id_to_liquid_map.items():
         element = soup.find(attrs={f"data-liquid-id": node_id})
         if element:
@@ -362,7 +366,7 @@ def create_and_inject_from_docx(file_content: bytes) -> str:
     2. Injects Liquid placeholders into the HTML.
     Returns the final Liquid template as a string.
     """
-    print("Starting full template creation workflow...")
+    logger.info("Starting full template creation workflow...")
 
     # Step 1: Convert DOCX to HTML
     html_content = convert_docx_to_html_and_cache(file_content)
@@ -374,5 +378,5 @@ def create_and_inject_from_docx(file_content: bytes) -> str:
     if not final_template:
         raise Exception("Failed to inject Liquid placeholders.")
 
-    print("Full template creation workflow completed successfully.")
+    logger.info("Full template creation workflow completed successfully.")
     return final_template
