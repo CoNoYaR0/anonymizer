@@ -124,6 +124,7 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
     prompt = ai_logic.build_prompt(id_to_text_map, annotations)
     logger.debug(f"Generated prompt: {prompt}")
 
+
     # 3. Call the new model
     logger.info("Step 3/3: Calling GPT-5.1 API to get placeholder map...")
     client = OpenAI(api_key=OPENAI_API_KEY)
