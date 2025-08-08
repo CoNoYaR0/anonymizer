@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from typing import Optional
 
 # Load environment variables at the module level
-load_dotenv()
+load_dotenv(verbose=True)
 logger = logging.getLogger(__name__)
 
 # --- Database Connection Pool ---
