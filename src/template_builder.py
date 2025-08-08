@@ -5,9 +5,8 @@ import time
 import sys
 import base64
 import json
-import re
 import logging
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -108,200 +107,29 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
         raise e
 
 
-# ---------------------------------------------------------------------------
-# 1) PROMPT GPT‑5 (détection → mapping Liquid)
-# ---------------------------------------------------------------------------
-
-PROMPT_GPT5 = """\
-You are a templating expert. You receive:
-1) A JSON object mapping HTML node IDs to text content (id_to_text_map).
-2) An optional JSON "annotations" object mapping the same IDs to detected types (e.g., "full_name", "job_title", "company", "date_range", etc.).
-
-Your task:
-- Produce a JSON object mapping the SAME IDs to Liquid placeholders **only for dynamic values**.
-- Exclude IDs whose text is a static label (e.g., "Experience", "Education", "Compétences", section titles, separators).
-- Output **ONLY** a valid JSON object (no prose).
-
-### Rules & Conventions
-- Keep keys identical to the input IDs.
-- Use consistent Liquid paths:
-  - Candidate:
-    - Full name → `{{{{ candidate.full_name }}}}`
-    - Initials (anonymization WSN rule) → `{{{{ candidate.initials }}}}`
-      - **WSN rule**: initials = UPPER(last_name[0] + first_name[:2]).
-        (Calcul will be handled outside the template; just map to `candidate.initials`.)
-    - Current job title → `{{{{ candidate.current_job.title }}}}`
-    - Current company → `{{{{ candidate.current_job.company }}}}`
-    - Location → `{{{{ candidate.location }}}}`
-    - Email → `{{{{ candidate.email }}}}`, Phone → `{{{{ candidate.phone }}}}`
-  - Experience (array, order preserved top→down):
-    - Title → `{{{{ experience[i].title }}}}`
-    - Company → `{{{{ experience[i].company }}}}`
-    - Date start/end → `{{{{ experience[i].date_start }}}}`, `{{{{ experience[i].date_end }}}}` (if missing end, omit the ID or map to `null`)
-    - Context (optional) → `{{{{ experience[i].context }}}}`
-    - Missions / tasks (0..N) → `{{{{ experience[i].tasks[j] }}}}`
-  - Education & certifications (arrays):
-    - School / center → `{{{{ education[i].school }}}}` / `{{{{ certifications[i].issuer }}}}`
-    - Degree / title → `{{{{ education[i].degree }}}}` / `{{{{ certifications[i].title }}}}`
-    - Dates (optional) → `{{{{ education[i].date }}}}`, `{{{{ certifications[i].date }}}}`
-    - URL (optional) → `{{{{ certifications[i].url }}}}`
-  - Skills (can evolve):
-    - Languages → `{{{{ skills.languages }}}}` (list)
-    - Frameworks → `{{{{ skills.frameworks }}}}` (list)
-    - Tools / Cloud / DBs → `{{{{ skills.tools }}}}`, `{{{{ skills.cloud }}}}`, `{{{{ skills.databases }}}}`
-    - Functional skills → `{{{{ skills.functional }}}}` (list)
-- If annotations are present, **respect them**. If they’re missing or ambiguous, infer conservatively.
-- If the text is clearly static (headers, separators, generic labels), **exclude** that ID.
-- Preserve arrays: for repeating blocks, assume index `i` (and `j` for tasks). If you suspect a repeating row, map consistently using `experience[i]` etc.
-- If a field is dynamic but its content may be absent (e.g., end date, context, URL), still map it (the rendering engine can handle null/empty).
-
-### Inputs
-id_to_text_map:
-{ID_TO_TEXT_MAP}
-
-annotations (optional):
-{ANNOTATIONS}
-
-### Output
-Return ONLY the final JSON mapping: ID → Liquid placeholder (no additional text).
-"""
-
-def build_prompt(id_to_text_map: Dict[str, str],
-                 annotations: Dict[str, Any] = None) -> str:
-    """
-    Formatte le prompt final pour GPT‑5.
-    """
-    return PROMPT_GPT5.format(
-        ID_TO_TEXT_MAP=json.dumps(id_to_text_map, ensure_ascii=False, indent=2),
-        ANNOTATIONS=json.dumps(annotations or {}, ensure_ascii=False, indent=2)
-    )
-
-# ---------------------------------------------------------------------------
-# 2) NOYAU DE REGEX (Python style)
-#    ⚠️ Ce sont des exemples – adapte-les à tes données/locale.
-# ---------------------------------------------------------------------------
-
-REGEX_CORE: Dict[str, List[re.Pattern]] = {
-    # Noms complets (prénom nom / nom prénom) – large filet
-    "full_name": [
-        re.compile(r"^[A-ZÉÈÀÂÎ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+(?:\s+[A-ZÉÈÀÂÎ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+){1,3}$")
-    ],
-
-    # Job title courant – mots fréquents
-    "job_title": [
-        re.compile(r"\b(lead|senior|jr\.?|junior|staff|principal|architect|manager|engineer|developer|développeur|ingénieur|devops|ml|data|product|designer|cto|cto|cpo)\b", re.I),
-    ],
-
-    # Société / entreprise – heuristique simple (mots-clés)
-    "company": [
-        re.compile(r"\b(sas|sa|sarl|ltd|inc|corp|gmbh|spa|s\.?a\.?r\.?l\.?)\b", re.I),
-    ],
-
-    # Date simple
-    "date": [
-        re.compile(r"\b(?:\d{1,2}[/-])?(?:\d{1,2}[/-])?\d{2,4}\b"),  # très permissif
-        re.compile(r"\b(?:janv\.?|févr\.?|mars|avr\.?|mai|juin|juil\.?|août|sept\.?|oct\.?|nov\.?|déc\.?|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d{4}\b", re.I),
-        re.compile(r"\b\d{4}\b")
-    ],
-
-    # Intervalle de dates
-    "date_range": [
-        re.compile(r"(?P<start>[^–\-→]+?)\s*(?:–|-|→|to|à)\s*(?P<end>[^–\-→]+?)$", re.I),
-        re.compile(r"(?P<start>\b\d{4}\b)\s*[-–]\s*(?P<end>\b\d{4}\b)"),
-    ],
-
-    # Email, phone, URL
-    "email": [re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)],
-    "phone": [re.compile(r"\+?\d[\d .\-()]{7,}\d")],
-    "url":   [re.compile(r"https?://[^\s]+", re.I)],
-
-    # Ville (heuristique : mot capitalisé + éventuellement pays)
-    "city": [
-        re.compile(r"^[A-ZÉÈÀÂÎ][a-zà-öø-ÿ'’\-]+(?:,\s*[A-Z][a-z]+)?$"),
-    ],
-
-    # Éducation / Certification (mots-clés fréquents)
-    "education": [
-        re.compile(r"\b(école|université|master|licence|bachelor|bsc|msc|phd| ingénierie|dipl[oô]me)\b", re.I),
-    ],
-    "certification": [
-        re.compile(r"\b(certification|certificate|certifié|aws certified|gcp professional|azure)\b", re.I),
-    ],
-
-    # Labels statiques (sections) à exclure
-    "static_label": [
-        re.compile(r"^\s*(expérience|experience|éducation|formation|certifications?|compétences|skills)\s*$", re.I),
-        re.compile(r"^\s*(backend|frontend|langages?|frameworks?|outils|tools|cloud|databases?)\s*$", re.I),
-    ],
-}
-
-# ---------------------------------------------------------------------------
-# 3) COMMENT LES UTILISER (logique de base)
-# ---------------------------------------------------------------------------
-
-def classify_text(txt: str) -> List[str]:
-    """
-    Retourne la/les étiquette(s) probable(s) pour un texte donné.
-    Heuristique simple : si "static_label" matche → on ne garde que static_label.
-    Sinon on collecte les autres catégories qui matchent.
-    """
-    txt_norm = txt.strip()
-    if not txt_norm:
-        return []
-
-    labels: List[str] = []
-    # Static d’abord : s’il matche, on s’arrête là (on exclura au mapping).
-    for p in REGEX_CORE["static_label"]:
-        if p.search(txt_norm):
-            return ["static_label"]
-
-    for label, patterns in REGEX_CORE.items():
-        if label == "static_label":
-            continue
-        for p in patterns:
-            if p.search(txt_norm):
-                labels.append(label)
-                break  # évite la redondance intra-catégorie
-    return labels
-
-
-def annotate_map(id_to_text_map: Dict[str, str]) -> Dict[str, Any]:
-    """
-    Parcourt le map id→texte, et retourne un JSON d’annotations :
-      { "<id>": { "labels": [...], "raw": "<texte>" }, ... }
-    """
-    annotations: Dict[str, Any] = {}
-    for _id, txt in id_to_text_map.items():
-        labels = classify_text(txt or "")
-        if labels:
-            annotations[_id] = {"labels": labels, "raw": txt}
-        else:
-            annotations[_id] = {"labels": [], "raw": txt}
-    return annotations
-
-
 def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
-    """
-    Sends the ID-to-text map to the AI after pre-processing with regex
-    and gets back an ID-to-Liquid map.
-    """
+    """Sends the ID-to-text map to the AI and gets back an ID-to-Liquid map."""
     client = OpenAI(api_key=OPENAI_API_KEY)
 
-    # 1. Classification par regex
-    logger.info("Annotating text map with regex...")
-    annotations = annotate_map(id_to_text_map)
+    prompt = f"""
+    You are a templating expert. Your task is to analyze the following JSON object, which maps unique IDs to text content from an HTML document.
+    Create a new JSON object that maps the same IDs to appropriate Liquid placeholders for any text that appears to be dynamic data (names, dates, job titles, etc.).
 
-    # 2. Construire le prompt pour GPT-5
-    logger.info("Building prompt for GPT-5...")
-    prompt = build_prompt(
-        id_to_text_map=id_to_text_map,
-        annotations=annotations
-    )
+    Guidelines:
+    - If a text value is dynamic, create a logical Liquid variable for it (e.g., "{{{{ candidate.name }}}}", "{{{{ experience.title }}}}").
+    - If a text value appears to be a static label (e.g., "Experience", "Education"), **exclude its ID** from the final JSON object.
+    - The keys in the returned JSON must be the original IDs.
+    - Ensure the output is ONLY a valid JSON object.
 
-    # 3. Appel à GPT-5
+    Here is the ID-to-text map to analyze:
+    {json.dumps(id_to_text_map, indent=2)}
+
+    Return the JSON object mapping IDs to Liquid placeholders now.
+    """
+
     logger.info("Calling OpenAI API to get placeholder map...")
     response = client.chat.completions.create(
-        model="gpt-5",
+        model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"}
     )
