@@ -176,3 +176,109 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   Refactored `src/database.py` to use a direct `DB_USER` environment variable instead of parsing the URL. This is a much cleaner and more explicit solution.
         *   Updated `.env.example` and `HOW_TO_USE.md` to reflect this simpler setup, instructing the user to copy the `DB_USER` directly from their Supabase dashboard.
 *   **Status:** The database connection logic is now both correct and simple, following best practices.
+*   **Phase 5 Status:** Complete. The project has been successfully reconstructed with a robust and maintainable architecture, ready for the next phase of development.
+
+---
+## Phase 6: Strategic Refactor - The "Pure Pipeline" Model
+*   **Date:** 2025-08-08
+*   **Objective:** Overhaul the entire project to implement a new, professional-grade software architecture based on a pure, testable, multi-stage pipeline. This phase will be executed as a series of focused Pull Requests (PRs).
+
+### 1) Deliverables (PRs)
+- **PR1:** Project scaffolding, modules, config, basic pipeline wiring + minimal tests.
+- **PR2:** Regex kernel + label/value classifier (confidence scoring) + unit tests.
+- **PR3:** Liquid mapping (loops for experiences/missions; education/certs/skills), WSN anonymization, end-to-end tests on fixtures.
+- **PR4:** CLI (`anoncv`) + debug mode, JSON schema validation, docs.
+- **PR5:** GitHub Actions (lint, tests, coverage), sample artifacts.
+
+*Each PR must include a focused README section and why-changes notes.*
+
+### 2) Target Data Schema (v1.0)
+*This will be the authoritative normalized schema for the mapping JSON, validated with Pydantic.*
+```json
+{
+  "candidate": {
+    "anon_id": "WSN",
+    "name": { "first": "", "last": "", "initials_wsn": "" },
+    "title": null,
+    "location": null,
+    "contacts": { "email": null, "phone": null, "linkedin": null, "github": null }
+  },
+  "experiences": [
+    {
+      "company": "", "role": "",
+      "start_date": "YYYY-MM" | "YYYY" | null,
+      "end_date":   "YYYY-MM" | "YYYY" | "Present" | null,
+      "location": null,
+      "context": null,
+      "missions": [ "..." ]
+    }
+  ],
+  "education": [ { "school": "", "degree": "", "year": "YYYY"|null, "link": null } ],
+  "certifications": [ { "name": "", "issuer": "", "year": "YYYY"|null, "link": null } ],
+  "skills": {
+    "languages": [], "frameworks": [], "tools": [], "functional": []
+  }
+}
+```
+
+### 3) Liquid Conventions
+- **Scalar fields:** `{{ candidate.title }}`, `{{ candidate.contacts.email }}`
+- **Arrays:**
+  ```liquid
+  {% for exp in experiences %} {{ exp.role }} at {{ exp.company }} {% endfor %}
+  {% for m in exp.missions %} • {{ m }} {% endfor %}
+  ```
+- Static labels ("Education", "Experience", "Skills") will be excluded from the mapping.
+
+### 4) Pipeline (Pure, Testable Functions)
+1.  `html_normalize(html) -> HtmlDoc`: Strip inline styles, merge split spans, normalize unicode.
+2.  `block_segment(HtmlDoc) -> list[Block]`: Identify logical blocks (sections, columns, rows).
+3.  `label_value_classify(blocks) -> list[BlockAnnotated]`: Tag text as `STATIC_LABEL` vs `DYNAMIC_VALUE` with a confidence score.
+4.  `map_to_schema(blocks) -> dict`: Build the final JSON object matching the target schema.
+5.  `to_liquid_mapping(schema) -> dict`: Generate the final `id -> "{{ ... }}"` mapping.
+
+### 5) Confidence & Fallback Rules
+- Each regex detector will return: `{ "type": "...", "value": "...", "score": float, "spans": [start, end] }`.
+- Map to Liquid only if `score >= 0.65`. Otherwise, leave as static text.
+- On conflict, pick the highest score. If scores are within 0.05, use semantic priority: dates > names > roles > companies.
+- Normalize dates to `YYYY-MM` or `YYYY`. Recognize "Present" synonyms.
+
+### 6) Regex Kernel (Core Definitions)
+```python
+# Person name (loose, supports accents, hyphens; avoid all-caps labels)
+NAME = r\"\"\"(?i)(?<![A-ZÀ-ÖØ-Þ])[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\\-]{1,}(?:\\s+[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'\\-]{1,}){0,3}(?!:)\"\"\"
+# Company cue words (multilingual)
+COMPANY_HINT = r\"\"\"(?i)\\b(SA|SAS|SARL|Ltd\\.?|LLC|Inc\\.?|GmbH|AG|Entreprise|Société|Company|Start\\-?up)\\b\"\"\"
+# Current job cues
+CURRENT_CUES = r\"\"\"(?i)\\b(Current|Présent|Actuel|En\\s+poste|Now)\\b\"\"\"
+# Roles / job titles (indicative, not exhaustive)
+ROLE_HINT = r\"\"\"(?i)\\b(Engineer|Developer|Développeur|Lead|Manager|Architect|Consultant|Data\\s+Scientist|DevOps|SRE|Product\\s+Owner)\\b\"\"\"
+# Date ranges:
+DATE_Y  = r\"\"\"(?<!\\d)(19\\d{2}|20\\d{2})(?!\\d)\"\"\"
+DATE_YM = r\"\"\"(?i)\\b(?:Jan(?:vier)?|Feb(?:ruary|\\.)?|Mar(?:ch|\\.)?|Apr(?:il|\\.)?|Mai|May|Jun(?:e|\\.)?|Jul(?:y|\\.)?|Aug(?:ust|\\.)?|Sep(?:t(?:ember|\\.)?)?|Oct(?:ober|\\.)?|Nov(?:ember|\\.)?|Dec(?:ember|\\.)?|Jan\\.|Feb\\.|Mar\\.|Apr\\.|Jun\\.|Jul\\.|Aug\\.|Sept\\.|Oct\\.|Nov\\.|Dec\\.)\\s+(19\\d{2}|20\\d{2})\\b\"\"\"
+RANGE = r\"\"\"(?i)(?P<start>(?:{YM}|{Y}))(?:\\s*[–\\-]\\s*(?P<end>(?:{YM}|{Y}|{P})))\"\"\".format(YM=DATE_YM, Y=DATE_Y, P=\"Present|Présent|Actuel|Now\")
+# Contacts
+EMAIL = r\"\"\"[A-Z0-9._%+\\-]+@[A-Z0-9.\\-]+\\.[A-Z]{2,}\"\"\"  # re.I
+PHONE = r\"\"\"(?x)(?:\\+\\d{1,3}[\\s\\-]?)?(?:\\(\\d{1,4}\\)[\\s\\-]?)?\\d(?:[\\s\\-]?\\d){7,}\"\"\"
+LINK  = r\"\"\"https?://[\\w\\-\\.~/#%?=&]+\"\"\"
+# Section labels to EXCLUDE from mapping
+SECTION_LABEL = r\"\"\"(?i)\\b(Experience|Expérience|Work\\s+Experience|Education|Éducation|Formation|Certifications?|Skills|Compétences|Projects?)\\b\"\"\"
+# Skills separators
+SKILL_SEP = r\"\"\"\\s*[•·,;\\|/\\u2022]+\\s*\"\"\"
+```
+
+### 7) WSN Anonymization (Name -> Initials)
+- **Rule:** First letter of `LASTNAME` + first two letters of `FIRSTNAME` (ASCII, uppercase).
+- **Example:** "Jean Michel Dupont" -> last="DUPONT", first="JEAN" -> WSN="DJE".
+- **Implementation:** `make_wsn(first, last) -> "WSN"` using `unicodedata` to strip accents for the WSN initials only.
+
+### 8) CLI & Config
+- **Command:** `anoncv build INPUT.html --out mapping.json --context context.json --debug`
+- **Behavior:** Produces (a) normalized schema JSON, (b) id->Liquid placeholders JSON, and (c) a debug report.
+
+### 9) Tests & Fixtures
+- **Fixtures:** 10+ tricky cases (e.g., only start date, parallel experiences, mixed languages).
+- **Tests:** Unit tests for each detector; end-to-end tests for the full pipeline; smoke tests for rendering.
+
+### 10) GitHub Actions
+- **CI Pipeline:** Python 3.11, run `ruff`/`flake8`, `mypy`, `pytest`, and require `coverage >= 85%`.
