@@ -1,4 +1,5 @@
 import os
+import logging
 from typing import Dict, Any
 from dotenv import load_dotenv
 
@@ -10,6 +11,7 @@ from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+logger = logging.getLogger(__name__)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 def _extract_text_from_pdf(file_path: str) -> str:
@@ -29,7 +31,7 @@ def _extract_text_from_pdf(file_path: str) -> str:
     #    to extract text from each image. The `AGENTS.md` specifies using
     #    the French language model (`lang='fra'`).
     # 3. Concatenate the text from all pages.
-    print(f"TODO: Extracting text from PDF: {file_path} using OCR (lang='fra').")
+    logger.info(f"TODO: Extracting text from PDF: {file_path} using OCR (lang='fra').")
     return "Placeholder text from a PDF document."
 
 def _extract_text_from_image(file_path: str) -> str:
@@ -44,7 +46,7 @@ def _extract_text_from_image(file_path: str) -> str:
     """
     # TODO: Implement the image OCR logic.
     # Use `pytesseract.image_to_string` on the image file, specifying `lang='fra'`.
-    print(f"TODO: Extracting text from Image: {file_path} using OCR (lang='fra').")
+    logger.info(f"TODO: Extracting text from Image: {file_path} using OCR (lang='fra').")
     return "Placeholder text from an image file."
 
 def _extract_text_from_docx(file_path: str) -> str:
@@ -60,7 +62,7 @@ def _extract_text_from_docx(file_path: str) -> str:
     # TODO: Implement the DOCX text extraction logic.
     # Use the `python-docx` library to open the file and iterate through
     # paragraphs to extract all the text.
-    print(f"TODO: Extracting text from DOCX: {file_path}.")
+    logger.info(f"TODO: Extracting text from DOCX: {file_path}.")
     return "Placeholder text from a DOCX file."
 
 def _get_structured_data_from_text(raw_text: str) -> Dict[str, Any]:
@@ -86,7 +88,7 @@ def _get_structured_data_from_text(raw_text: str) -> Dict[str, Any]:
     #    to extract the information and format it according to your schema.
     # 3. Call the OpenAI API (GPT-4o) with the prompt.
     # 4. Parse the JSON response from the LLM.
-    print("TODO: Calling OpenAI API to structure the extracted text into JSON.")
+    logger.info("TODO: Calling OpenAI API to structure the extracted text into JSON.")
 
     # Placeholder return value
     return {

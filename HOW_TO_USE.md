@@ -81,19 +81,27 @@ Go to the **Storage** section in your Supabase dashboard and create two **public
 
 ## Running the Application
 
-Once your environment is configured, you can run the FastAPI server using Uvicorn, which is included in the project's dependencies.
+Once your environment is configured, you can run the FastAPI server using Uvicorn. The application's logging level can be controlled via the `LOG_LEVEL` environment variable.
 
-From the root of the project directory, run the following command:
+From the root of the project directory, run one of the following commands:
 
+**For regular development (recommended):**
+This will show `INFO` level logs from the application and libraries.
 ```bash
-uvicorn src.main:app --reload
+LOG_LEVEL=INFO uvicorn src.main:app --reload
 ```
 
-This command will start the development server.
+**For verbose debugging:**
+This will show all `DEBUG` level logs, which is useful for deep troubleshooting.
+```bash
+LOG_LEVEL=DEBUG uvicorn src.main:app --reload
+```
+
+-   `LOG_LEVEL=...` sets the log verbosity for the application. Valid levels include `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`.
 -   `src.main:app` tells Uvicorn where to find the FastAPI application instance (`app` in `src/main.py`).
 -   `--reload` enables hot-reloading, so the server will automatically restart when you make changes to the code.
 
-You should see output in your console indicating that the server is running, including access logs for each request and detailed logs from the application itself. This will help you monitor the application's activity in real-time.
+With the new standardized logging, you will now see consistent, formatted log output from all application modules in your console.
 
 The API will be available at `http://127.0.0.1:8000`.
 

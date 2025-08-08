@@ -1,6 +1,9 @@
+import logging
 from typing import Dict, Any
 import liquid
 from weasyprint import HTML
+
+logger = logging.getLogger(__name__)
 
 def render_cv_to_pdf(template_content: str, cv_data: Dict[str, Any]) -> bytes:
     """
@@ -29,7 +32,7 @@ def render_cv_to_pdf(template_content: str, cv_data: Dict[str, Any]) -> bytes:
     #    - `pdf_bytes = HTML(string=rendered_html).write_pdf()`
     # 4. Return the PDF bytes.
 
-    print("TODO: Rendering Liquid template with CV data.")
+    logger.info("TODO: Rendering Liquid template with CV data.")
 
     # --- Placeholder Implementation ---
     # This is a simplified version of the logic to have a working placeholder.
@@ -59,7 +62,7 @@ def render_cv_to_pdf(template_content: str, cv_data: Dict[str, Any]) -> bytes:
         </body>
     </html>
     """
-    print("TODO: Converting rendered HTML to PDF using WeasyPrint.")
+    logger.info("TODO: Converting rendered HTML to PDF using WeasyPrint.")
 
     # 2. Convert the HTML to PDF
     pdf_bytes = HTML(string=placeholder_html).write_pdf()
