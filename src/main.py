@@ -8,34 +8,41 @@ import io
 import uuid
 
 # --- Logging Configuration ---
+# Read log level from environment variable, default to INFO.
+# This allows for dynamic control of log verbosity.
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+
 log_config = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {
         "default": {
-            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            # Including process and thread IDs can be useful for debugging
+            "format": "%(asctime)s - %(process)d - %(thread)d - %(name)s - %(levelname)s - %(message)s",
         },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "default",
+            "stream": "ext://sys.stdout",  # Log to stdout for consistency
         },
     },
     "loggers": {
-        "src": {  # This will catch logs from all modules in the 'src' package
+        "src": {  # Logger for the entire 'src' package (our application)
             "handlers": ["console"],
-            "level": "INFO",
-            "propagate": False,
+            "level": LOG_LEVEL,
+            "propagate": False,  # Prevents log messages from being passed to the root logger
         },
     },
-    "root": {  # Catch all other loggers, including uvicorn.access
+    "root": {  # Root logger configuration to catch logs from libraries (e.g., uvicorn, fastapi)
         "handlers": ["console"],
-        "level": "INFO",
+        "level": LOG_LEVEL,
     },
 }
 dictConfig(log_config)
-# It's important to get the logger after the config is applied
+
+# It's important to get the logger AFTER the config has been applied.
 logger = logging.getLogger(__name__)
 
 # Import the core logic modules

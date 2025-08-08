@@ -1,6 +1,6 @@
 import os
-import sys
 import psycopg2
+import logging
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
@@ -8,6 +8,7 @@ from typing import Optional
 
 # Load environment variables at the module level
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 # --- Database Connection Pool ---
 connection_pool = None
@@ -39,14 +40,15 @@ def initialize_connection_pool():
 
     try:
         db_url = _get_supabase_db_url()
-        print("Initializing database connection pool...")
+        logger.info("Initializing database connection pool...")
         connection_pool = psycopg2.pool.SimpleConnectionPool(
             minconn=1, maxconn=10, dsn=db_url
         )
-        print("Database connection pool initialized successfully.")
+        logger.info("Database connection pool initialized successfully.")
     except Exception as e:
-        print(f"FATAL: Could not initialize database connection pool: {e}", file=sys.stderr)
-        sys.exit(1)
+        logger.critical(f"Could not initialize database connection pool: {e}", exc_info=True)
+        # Propagate the exception to let the application decide how to handle a startup failure.
+        raise
 
 
 def get_db_connection():
@@ -80,13 +82,13 @@ def get_cached_html(file_hash: str) -> Optional[str]:
             )
             result = cursor.fetchone()
             if result:
-                print(f"Cache hit for hash: {file_hash}")
+                logger.debug(f"Cache hit for hash: {file_hash}")
                 return result[0]
             else:
-                print(f"Cache miss for hash: {file_hash}")
+                logger.info(f"Cache miss for hash: {file_hash}")
                 return None
     except Exception as e:
-        print(f"Error getting cached HTML: {e}", file=sys.stderr)
+        logger.error(f"Error getting cached HTML for hash {file_hash}: {e}", exc_info=True)
         return None
     finally:
         if conn:
@@ -112,9 +114,9 @@ def cache_html(file_hash: str, html_content: str) -> None:
                 (file_hash, html_content)
             )
             conn.commit()
-            print(f"Successfully cached HTML for hash: {file_hash}")
+            logger.info(f"Successfully cached HTML for hash: {file_hash}")
     except Exception as e:
-        print(f"Error caching HTML: {e}", file=sys.stderr)
+        logger.error(f"Error caching HTML for hash {file_hash}: {e}", exc_info=True)
         if conn:
             conn.rollback() # Roll back the transaction on error
     finally:
