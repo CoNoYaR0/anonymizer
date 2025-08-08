@@ -16,6 +16,7 @@ from openai import OpenAI
 # ... (other imports and functions remain the same)
 # Import caching functions from the database module
 from . import database
+from . import ai_logic
 
 # Load environment variables
 load_dotenv()
@@ -108,83 +109,39 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
 
 
 def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
-    """Sends the ID-to-text map to the AI and gets back an ID-to-Liquid map."""
+    """
+    Generates a map of ID-to-Liquid-placeholders using the new GPT-5 workflow.
+    """
+    logger.info("Starting AI placeholder mapping workflow...")
+
+    # 1. Annotate the text map using local regex-based classification
+    logger.info("Step 1/3: Annotating text map with regex classifiers...")
+    annotations = ai_logic.annotate_map(id_to_text_map)
+    logger.debug(f"Generated annotations: {json.dumps(annotations, ensure_ascii=False, indent=2)}")
+
+    # 2. Build the detailed prompt for the new model
+    logger.info("Step 2/3: Building prompt for GPT-5...")
+    prompt = ai_logic.build_prompt(id_to_text_map, annotations)
+    logger.debug(f"Generated prompt: {prompt}")
+
+
+    # 3. Call the new model
+    logger.info("Step 3/3: Calling GPT-5.1 API to get placeholder map...")
     client = OpenAI(api_key=OPENAI_API_KEY)
-
-    prompt = f"""
-You are an expert in parsing HTML CV content and converting it into dynamic Liquid placeholders.
-Analyze the following JSON object, which maps HTML element IDs to their extracted text values.
-
-Your task: return a **new JSON object** mapping the same IDs to Liquid placeholders for any dynamic data.
-Do not return static labels or section headings.
-
-📜 Rules:
-
-1. **Anonymization**
-   - If the text is the candidate's full name, anonymize it: keep the first letter of the last name + first two letters of the first name.
-     Example: "John Smith" → "SJo".
-     Use: `{{ candidate.initials }}`.
-
-2. **Current Job**
-   - If the text is the current job title: `{{ candidate.current_job }}`.
-   - If it is a past job: `{{ experience[i].title }}` where `i` is reverse chronological index (0 = most recent).
-
-3. **Experience Years & Company**
-   - Years of experience: `{{ candidate.experience_years }}`.
-   - Company name: `{{ experience[i].company }}`.
-
-4. **Date ranges**
-   - Start date: `{{ experience[i].start_date }}`.
-   - End date: `{{ experience[i].end_date }}`.
-   - If end date missing: `{{ experience[i].end_date | default: "Present" }}`.
-
-5. **Education & Certification**
-   - Degree / diploma: `{{ education[i].degree }}`.
-   - School / center: `{{ education[i].school }}`.
-   - If there is a link (URL), map it to: `{{ education[i].school_url }}` — keep only the URL.
-
-6. **Technical & Functional Skills**
-   - Programming languages, frameworks, backend/front: these are **static labels** — exclude their IDs.
-   - Stack names or versions that change: `{{ skills.stack[i] }}`.
-
-7. **Professional Experience**
-   - For each job entry:
-     - Job title: `{{ experience[i].title }}`.
-     - Company: `{{ experience[i].company }}`.
-     - Start date / end date: as above.
-     - Context (if exists): `{{ experience[i].context }}`.
-     - Missions / tasks:
-       - If single: `{{ experience[i].tasks[0] }}`.
-       - If multiple: `{{ experience[i].tasks[j] }}` for each task index `j`.
-
-8. **General Rules**
-   - Keep the **original HTML IDs** as keys.
-   - Values must be **only Liquid placeholders**, never raw text.
-   - Exclude section headers like "Experience", "Education", "Skills".
-   - The output must be strictly a **valid JSON object** without commentary.
-
-Here is the HTML ID-to-text map to process:
-{json.dumps(id_to_text_map, indent=2)}
-
-Return only the JSON mapping now.
-
-"""
-
-    logger.info("Calling OpenAI API to get placeholder map...")
-    response = client.chat.completions.create(
-        model="gpt-4o",
+    response = client.chat.com_pletions.create(
+        model="gpt-5.1",  # Switched to the new model
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"}
     )
 
     response_content = response.choices[0].message.content
-    logger.debug(f"OpenAI response: {response_content}")
+    logger.debug(f"GPT-5.1 response: {response_content}")
 
     try:
         return json.loads(response_content)
     except json.JSONDecodeError:
-        logger.error("Failed to decode JSON from OpenAI response.", exc_info=True)
-        raise Exception("Failed to decode JSON from OpenAI response.")
+        logger.error("Failed to decode JSON from AI response.", exc_info=True)
+        raise Exception("Failed to decode JSON from AI response.")
 
 
 def inject_liquid_placeholders(html_content: str) -> str:
