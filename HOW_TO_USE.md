@@ -63,9 +63,6 @@ DB_USER="..."
 DB_PASSWORD="..."
 
 # --- Application Settings ---
-# Set to "True" to enable verbose DEBUG-level logging for development.
-# Set to "False" for quieter INFO-level logging in production.
-DEBUG="False"
 ```
 
 ### 3. Run Database Migrations
@@ -96,7 +93,7 @@ This command will start the development server.
 -   `src.main:app` tells Uvicorn where to find the FastAPI application instance (`app` in `src/main.py`).
 -   `--reload` enables hot-reloading, so the server will automatically restart when you make changes to the code.
 
-You should see output in your console indicating that the server is running, along with logs for any incoming requests or application processes. This will help you monitor the application's activity in real-time.
+You should see output in your console indicating that the server is running, including access logs for each request and detailed logs from the application itself. This will help you monitor the application's activity in real-time.
 
 The API will be available at `http://127.0.0.1:8000`.
 
