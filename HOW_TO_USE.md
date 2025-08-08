@@ -82,8 +82,21 @@ Go to the **Storage** section in your Supabase dashboard and create two **public
 
 ## Running the Application
 
-(This section remains the same)
-...
+Once your environment is configured, you can run the FastAPI server using Uvicorn, which is included in the project's dependencies.
+
+From the root of the project directory, run the following command:
+
+```bash
+uvicorn src.main:app --reload
+```
+
+This command will start the development server.
+-   `src.main:app` tells Uvicorn where to find the FastAPI application instance (`app` in `src/main.py`).
+-   `--reload` enables hot-reloading, so the server will automatically restart when you make changes to the code.
+
+You should see output in your console indicating that the server is running, along with logs for any incoming requests or application processes. This will help you monitor the application's activity in real-time.
+
+The API will be available at `http://127.0.0.1:8000`.
 
 ---
 

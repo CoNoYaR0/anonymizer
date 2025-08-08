@@ -1,7 +1,12 @@
 import os
 import sys
+import logging
 import psycopg2
 from dotenv import load_dotenv
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # It's better to import the tested function than to duplicate logic.
 # We need to temporarily add `src` to the path to allow the import
@@ -23,14 +28,14 @@ def apply_migrations():
         db_url = _get_supabase_db_url()
 
         # Connect to the database
-        print(f"Connecting to the database...")
+        logger.info("Connecting to the database...")
         conn = psycopg2.connect(db_url)
         cursor = conn.cursor()
 
         # Create the html_cache table
         # This table will store the HTML content of converted DOCX files,
         # using the file's SHA-256 hash as the primary key to avoid re-conversion.
-        print("Creating table: html_cache...")
+        logger.info("Creating table: html_cache...")
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS html_cache (
             hash TEXT PRIMARY KEY,
@@ -41,22 +46,21 @@ def apply_migrations():
 
         conn.commit()
         cursor.close()
-        print("Database migration applied successfully.")
+        logger.info("Database migration applied successfully.")
 
     except (ValueError, psycopg2.OperationalError) as e:
-        print(f"Error: Could not connect to the database.", file=sys.stderr)
-        print(f"Please check your Supabase environment variables in the .env file.", file=sys.stderr)
-        print(f"Details: {e}", file=sys.stderr)
+        logger.critical("Error: Could not connect to the database.", exc_info=True)
+        logger.critical("Please check your Supabase environment variables in the .env file.")
         sys.exit(1)
 
     except Exception as e:
-        print(f"An unexpected error occurred: {e}", file=sys.stderr)
+        logger.critical(f"An unexpected error occurred: {e}", exc_info=True)
         sys.exit(1)
 
     finally:
         if conn:
             conn.close()
-            print("Database connection closed.")
+            logger.info("Database connection closed.")
 
 if __name__ == "__main__":
     apply_migrations()
