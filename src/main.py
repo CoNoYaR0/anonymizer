@@ -1,22 +1,41 @@
 import os
 import logging
+from logging.config import dictConfig
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body
 from fastapi.responses import StreamingResponse, RedirectResponse, JSONResponse
 from typing import Annotated
 import io
 import uuid
-from dotenv import load_dotenv
 
 # --- Logging Configuration ---
-# Load environment variables to get the DEBUG flag
-load_dotenv()
-
-# Set logging level based on the DEBUG environment variable
-log_level = logging.DEBUG if os.getenv("DEBUG") == "True" else logging.INFO
-logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
-logger.info(f"Logging initialized with level: {logging.getLevelName(log_level)}")
+log_config = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "default",
+        },
+    },
+    "loggers": {
+        "src": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+}
+dictConfig(log_config)
+logger = logging.getLogger("src")
 
 # Import the core logic modules
 from . import template_builder
