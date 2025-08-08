@@ -181,3 +181,26 @@ def inject_liquid_placeholders(html_content: str) -> str:
         del element["data-liquid-id"]
 
     return str(soup)
+
+
+def create_and_inject_from_docx(file_content: bytes) -> str:
+    """
+    Orchestrates the entire template creation process from a DOCX file.
+    1. Converts DOCX to HTML (using cache if available).
+    2. Injects Liquid placeholders into the HTML.
+    Returns the final Liquid template as a string.
+    """
+    print("Starting full template creation workflow...")
+
+    # Step 1: Convert DOCX to HTML
+    html_content = convert_docx_to_html_and_cache(file_content)
+    if not html_content:
+        raise Exception("Failed to get HTML content from DOCX.")
+
+    # Step 2: Inject Liquid placeholders
+    final_template = inject_liquid_placeholders(html_content)
+    if not final_template:
+        raise Exception("Failed to inject Liquid placeholders.")
+
+    print("Full template creation workflow completed successfully.")
+    return final_template
