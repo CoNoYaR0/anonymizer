@@ -63,6 +63,8 @@ DB_USER="..."
 DB_PASSWORD="..."
 
 # --- Application Settings ---
+# Set to "True" to enable verbose DEBUG-level logging for development.
+# Set to "False" for quieter INFO-level logging in production.
 DEBUG="False"
 ```
 
