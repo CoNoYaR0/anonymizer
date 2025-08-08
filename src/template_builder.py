@@ -16,6 +16,7 @@ from openai import OpenAI
 # ... (other imports and functions remain the same)
 # Import caching functions from the database module
 from . import database
+from . import ai_logic
 
 # Load environment variables
 load_dotenv()
@@ -108,40 +109,38 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
 
 
 def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
-    """Sends the ID-to-text map to the AI and gets back an ID-to-Liquid map."""
-    client = OpenAI(api_key=OPENAI_API_KEY)
-
-    prompt = f"""
-    You are a templating expert. Your task is to analyze the following JSON object, which maps unique IDs to text content from an HTML document.
-    Create a new JSON object that maps the same IDs to appropriate Liquid placeholders for any text that appears to be dynamic data (names, dates, job titles, etc.).
-
-    Guidelines:
-    - If a text value is dynamic, create a logical Liquid variable for it (e.g., "{{{{ candidate.name }}}}", "{{{{ experience.title }}}}").
-    - If a text value appears to be a static label (e.g., "Experience", "Education"), **exclude its ID** from the final JSON object.
-    - The keys in the returned JSON must be the original IDs.
-    - Ensure the output is ONLY a valid JSON object.
-
-    Here is the ID-to-text map to analyze:
-    {json.dumps(id_to_text_map, indent=2)}
-
-    Return the JSON object mapping IDs to Liquid placeholders now.
     """
+    Generates a map of ID-to-Liquid-placeholders using the new GPT-5 workflow.
+    """
+    logger.info("Starting AI placeholder mapping workflow...")
 
-    logger.info("Calling OpenAI API to get placeholder map...")
-    response = client.chat.completions.create(
-        model="gpt-4o",
+    # 1. Annotate the text map using local regex-based classification
+    logger.info("Step 1/3: Annotating text map with regex classifiers...")
+    annotations = ai_logic.annotate_map(id_to_text_map)
+    logger.debug(f"Generated annotations: {json.dumps(annotations, ensure_ascii=False, indent=2)}")
+
+    # 2. Build the detailed prompt for the new model
+    logger.info("Step 2/3: Building prompt for GPT-5...")
+    prompt = ai_logic.build_prompt(id_to_text_map, annotations)
+    logger.debug(f"Generated prompt: {prompt}")
+
+    # 3. Call the new model
+    logger.info("Step 3/3: Calling GPT-5.1 API to get placeholder map...")
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    response = client.chat.com_pletions.create(
+        model="gpt-5.1",  # Switched to the new model
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"}
     )
 
     response_content = response.choices[0].message.content
-    logger.debug(f"OpenAI response: {response_content}")
+    logger.debug(f"GPT-5.1 response: {response_content}")
 
     try:
         return json.loads(response_content)
     except json.JSONDecodeError:
-        logger.error("Failed to decode JSON from OpenAI response.", exc_info=True)
-        raise Exception("Failed to decode JSON from OpenAI response.")
+        logger.error("Failed to decode JSON from AI response.", exc_info=True)
+        raise Exception("Failed to decode JSON from AI response.")
 
 
 def inject_liquid_placeholders(html_content: str) -> str:
