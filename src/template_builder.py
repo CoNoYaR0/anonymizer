@@ -112,20 +112,63 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
     client = OpenAI(api_key=OPENAI_API_KEY)
 
     prompt = f"""
-    You are a templating expert. Your task is to analyze the following JSON object, which maps unique IDs to text content from an HTML document.
-    Create a new JSON object that maps the same IDs to appropriate Liquid placeholders for any text that appears to be dynamic data (names, dates, job titles, etc.).
+You are an expert in parsing HTML CV content and converting it into dynamic Liquid placeholders.
+Analyze the following JSON object, which maps HTML element IDs to their extracted text values.
 
-    Guidelines:
-    - If a text value is dynamic, create a logical Liquid variable for it (e.g., "{{{{ candidate.name }}}}", "{{{{ experience.title }}}}").
-    - If a text value appears to be a static label (e.g., "Experience", "Education"), **exclude its ID** from the final JSON object.
-    - The keys in the returned JSON must be the original IDs.
-    - Ensure the output is ONLY a valid JSON object.
+Your task: return a **new JSON object** mapping the same IDs to Liquid placeholders for any dynamic data.
+Do not return static labels or section headings.
 
-    Here is the ID-to-text map to analyze:
-    {json.dumps(id_to_text_map, indent=2)}
+📜 Rules:
 
-    Return the JSON object mapping IDs to Liquid placeholders now.
-    """
+1. **Anonymization**
+   - If the text is the candidate's full name, anonymize it: keep the first letter of the last name + first two letters of the first name.
+     Example: "John Smith" → "SJo".
+     Use: `{{ candidate.initials }}`.
+
+2. **Current Job**
+   - If the text is the current job title: `{{ candidate.current_job }}`.
+   - If it is a past job: `{{ experience[i].title }}` where `i` is reverse chronological index (0 = most recent).
+
+3. **Experience Years & Company**
+   - Years of experience: `{{ candidate.experience_years }}`.
+   - Company name: `{{ experience[i].company }}`.
+
+4. **Date ranges**
+   - Start date: `{{ experience[i].start_date }}`.
+   - End date: `{{ experience[i].end_date }}`.
+   - If end date missing: `{{ experience[i].end_date | default: "Present" }}`.
+
+5. **Education & Certification**
+   - Degree / diploma: `{{ education[i].degree }}`.
+   - School / center: `{{ education[i].school }}`.
+   - If there is a link (URL), map it to: `{{ education[i].school_url }}` — keep only the URL.
+
+6. **Technical & Functional Skills**
+   - Programming languages, frameworks, backend/front: these are **static labels** — exclude their IDs.
+   - Stack names or versions that change: `{{ skills.stack[i] }}`.
+
+7. **Professional Experience**
+   - For each job entry:
+     - Job title: `{{ experience[i].title }}`.
+     - Company: `{{ experience[i].company }}`.
+     - Start date / end date: as above.
+     - Context (if exists): `{{ experience[i].context }}`.
+     - Missions / tasks:
+       - If single: `{{ experience[i].tasks[0] }}`.
+       - If multiple: `{{ experience[i].tasks[j] }}` for each task index `j`.
+
+8. **General Rules**
+   - Keep the **original HTML IDs** as keys.
+   - Values must be **only Liquid placeholders**, never raw text.
+   - Exclude section headers like "Experience", "Education", "Skills".
+   - The output must be strictly a **valid JSON object** without commentary.
+
+Here is the HTML ID-to-text map to process:
+{json.dumps(id_to_text_map, indent=2)}
+
+Return only the JSON mapping now.
+
+"""
 
     logger.info("Calling OpenAI API to get placeholder map...")
     response = client.chat.completions.create(
