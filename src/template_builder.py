@@ -145,26 +145,35 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
 
 def inject_liquid_placeholders(html_content: str) -> str:
     """
-    Uses a token-efficient, ID-based hybrid approach to inject Liquid placeholders.
+    Uses a block-based approach to group text, preventing fragmentation before sending to the AI.
     """
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is not set.")
 
-    logger.info("Parsing HTML and preparing for AI injection...")
+    logger.info("Parsing HTML and preparing for AI injection using block-based text grouping...")
     soup = BeautifulSoup(html_content, "html.parser")
 
-    # 1. Add unique IDs to all text nodes and create an ID-to-text map
+    # 1. Find meaningful block-level elements and create the ID-to-text map
     id_to_text_map = {}
     node_counter = 0
-    for text_node in soup.find_all(string=True):
-        if text_node.strip() and not isinstance(text_node.parent, (BeautifulSoup, NavigableString)) and text_node.parent.name not in ['style', 'script']:
+    # A list of tags that likely represent a self-contained block of text.
+    # This avoids processing tiny, fragmented text nodes from complex spans.
+    block_tags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'td', 'th', 'div']
+
+    for element in soup.find_all(block_tags):
+        # We only care about leaf nodes in the block-tag hierarchy to avoid duplication
+        if element.find(block_tags):
+            continue
+
+        text = element.get_text(strip=True)
+        if text:
             node_id = f"liquid-node-{node_counter}"
-            id_to_text_map[node_id] = text_node.strip()
-            text_node.parent[f"data-liquid-id"] = node_id
+            id_to_text_map[node_id] = text
+            element['data-liquid-id'] = node_id
             node_counter += 1
 
     if not id_to_text_map:
-        logger.warning("No text nodes found to process in inject_liquid_placeholders.")
+        logger.warning("No text blocks found to process in inject_liquid_placeholders.")
         return str(soup)
 
     # 2. Get the replacement map from the AI
@@ -173,13 +182,13 @@ def inject_liquid_placeholders(html_content: str) -> str:
     # 3. Replace content and remove IDs
     logger.info("Replacing content with Liquid placeholders...")
     for node_id, liquid_variable in id_to_liquid_map.items():
-        element = soup.find(attrs={f"data-liquid-id": node_id})
+        element = soup.find(attrs={"data-liquid-id": node_id})
         if element:
-            # Clear the element and add the new Liquid variable
+            # Clear the element's existing content and add the new Liquid variable
             element.clear()
             element.append(NavigableString(liquid_variable))
 
-    # 4. Clean up all the data-liquid-id attributes
+    # 4. Clean up all the data-liquid-id attributes (already done by .clear(), but good practice)
     for element in soup.find_all(attrs={"data-liquid-id": True}):
         del element["data-liquid-id"]
 
