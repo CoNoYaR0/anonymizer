@@ -6,7 +6,8 @@ import sys
 import base64
 import json
 import logging
-from typing import Optional, Dict
+import re
+from typing import Dict
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -108,16 +109,16 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
         raise e
 
 
-def _get_ai_replacement_map(text_blocks: Dict[str, str]) -> Dict[str, str]:
+def _get_ai_replacement_map(text_map: Dict[str, str]) -> Dict[str, str]:
     """
     Generates a map of ID-to-Liquid-placeholders using a simplified text map.
-    The AI's job is now much easier as the text has been re-assembled.
+    The AI's job is now much easier as the text has been pre-processed.
     """
     logger.info("Starting AI placeholder mapping workflow...")
 
-    prompt = ai_logic.build_prompt(text_blocks) # Assumes ai_logic.build_prompt is updated
+    prompt = ai_logic.build_prompt(text_map)
 
-    logger.info("Calling OpenAI API with re-assembled text blocks...")
+    logger.info("Calling OpenAI API with pre-processed text nodes...")
     client = OpenAI(api_key=OPENAI_API_KEY)
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -136,10 +137,46 @@ def _get_ai_replacement_map(text_blocks: Dict[str, str]) -> Dict[str, str]:
         raise Exception("Failed to decode JSON from AI response.")
 
 
+def _surgical_split_preprocessor(soup: BeautifulSoup) -> BeautifulSoup:
+    """
+    Finds text nodes with multiple pieces of information and surgically splits
+    them into multiple, simpler nodes. This preserves styling and fixes the
+    root cause of AI confusion.
+    """
+    logger.info("Surgically splitting complex text nodes...")
+
+    # Regex for lines like "Label: Value"
+    split_regex = re.compile(r"^\s*([a-zA-Z\s&/]+?)\s*:\s*(.*)")
+
+    for text_node in list(soup.find_all(string=True)):
+        if not text_node.strip() or text_node.parent.name in ['style', 'script']:
+            continue
+
+        original_text = str(text_node)
+
+        # Split "Label: Value" lines
+        match = split_regex.match(original_text)
+        if match:
+            label, value = match.groups()
+            if value.strip():
+                # Create a new span for the label and one for the value
+                label_span = soup.new_tag("span")
+                label_span.string = f"{label.strip()}: "
+
+                value_span = soup.new_tag("span")
+                value_span.string = value.strip()
+
+                # Replace the original text node with the new spans
+                text_node.replace_with(label_span)
+                label_span.insert_after(value_span)
+                logger.debug(f"Split line: '{original_text}'")
+
+    return soup
+
+
 def inject_liquid_placeholders(html_content: str) -> str:
     """
-    Uses an intelligent text re-assembly approach before calling the AI.
-    This fixes the root cause of the AI's confusion: fragmented text nodes.
+    Uses a surgical pre-processing step to simplify the HTML before calling the AI.
     """
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is not set.")
@@ -147,45 +184,37 @@ def inject_liquid_placeholders(html_content: str) -> str:
     logger.info("Parsing HTML and preparing for AI injection...")
     soup = BeautifulSoup(html_content, "html.parser")
 
-    # 1. Re-assemble fragmented text and build a map of block-level elements to their coherent text.
-    text_blocks = {}
-    # Find all major block-level elements that likely contain distinct pieces of content.
-    # This list can be refined based on the structure of Convertio's output.
-    for i, block in enumerate(soup.find_all(['p', 'div', 'li', 'h1', 'h2', 'h3', 'td'])):
-        # Get all text from the block, joined by spaces, and stripped of excess whitespace.
-        text = block.get_text(separator=' ', strip=True)
-        if text:
-            block_id = f"block-id-{i}"
-            text_blocks[block_id] = text
-            block['data-liquid-id'] = block_id
+    # 1. Surgically split complex nodes to simplify the AI's task
+    soup = _surgical_split_preprocessor(soup)
 
-    if not text_blocks:
-        logger.warning("No text blocks found to process.")
+    # 2. Build a map of the simplified text nodes
+    id_to_text_map = {}
+    node_counter = 0
+    for text_node in soup.find_all(string=True):
+        text = text_node.strip()
+        if text and text_node.parent.name not in ['style', 'script']:
+            node_id = f"liquid-node-{node_counter}"
+            id_to_text_map[node_id] = text
+            # We need a new way to tag elements if we replace text nodes
+            # Let's wrap the text node in a span with the ID
+            wrapper_span = soup.new_tag("span", attrs={"data-liquid-id": node_id})
+            text_node.wrap(wrapper_span)
+            node_counter += 1
+
+    if not id_to_text_map:
+        logger.warning("No text nodes found to process.")
         return str(soup)
 
-    # 2. Get the replacement map from the AI
-    # The AI now receives a clean map of {block-id: "coherent line of text"}
-    id_to_liquid_map = _get_ai_replacement_map(text_blocks)
+    # 3. Get the replacement map from the AI
+    id_to_liquid_map = _get_ai_replacement_map(id_to_text_map)
 
-    # 3. Replace content with surgical precision to preserve styling
-    logger.info("Surgically injecting placeholders to preserve styling...")
-    for block_id, liquid_variable in id_to_liquid_map.items():
-        element = soup.find(attrs={"data-liquid-id": block_id})
-        if element:
-            # Find all text nodes within this block
-            child_text_nodes = element.find_all(string=True)
-
-            if child_text_nodes:
-                # Replace the content of the first text node with the placeholder
-                child_text_nodes[0].replace_with(NavigableString(liquid_variable))
-
-                # Remove the content of all subsequent text nodes within this block
-                for i in range(1, len(child_text_nodes)):
-                    child_text_nodes[i].extract()
-
-    # 4. Clean up all the data-liquid-id attributes
-    for element in soup.find_all(attrs={"data-liquid-id": True}):
-        del element["data-liquid-id"]
+    # 4. Replace content by finding the wrapper spans
+    logger.info("Replacing content with Liquid placeholders...")
+    for node_id, liquid_variable in id_to_liquid_map.items():
+        wrapper_span = soup.find("span", attrs={"data-liquid-id": node_id})
+        if wrapper_span:
+            # Replace the wrapper span with just the liquid variable text node
+            wrapper_span.replace_with(NavigableString(liquid_variable))
 
     return str(soup)
 
