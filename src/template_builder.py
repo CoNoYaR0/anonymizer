@@ -167,14 +167,21 @@ def inject_liquid_placeholders(html_content: str) -> str:
     # The AI now receives a clean map of {block-id: "coherent line of text"}
     id_to_liquid_map = _get_ai_replacement_map(text_blocks)
 
-    # 3. Replace content and remove IDs
-    logger.info("Replacing content with Liquid placeholders...")
+    # 3. Replace content with surgical precision to preserve styling
+    logger.info("Surgically injecting placeholders to preserve styling...")
     for block_id, liquid_variable in id_to_liquid_map.items():
         element = soup.find(attrs={"data-liquid-id": block_id})
         if element:
-            # Replace the entire content of the block with the placeholder
-            element.clear()
-            element.append(NavigableString(liquid_variable))
+            # Find all text nodes within this block
+            child_text_nodes = element.find_all(string=True)
+
+            if child_text_nodes:
+                # Replace the content of the first text node with the placeholder
+                child_text_nodes[0].replace_with(NavigableString(liquid_variable))
+
+                # Remove the content of all subsequent text nodes within this block
+                for i in range(1, len(child_text_nodes)):
+                    child_text_nodes[i].extract()
 
     # 4. Clean up all the data-liquid-id attributes
     for element in soup.find_all(attrs={"data-liquid-id": True}):
