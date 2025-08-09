@@ -151,59 +151,74 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
         raise Exception("Failed to decode JSON from AI response.")
 
 
-def _preprocess_html_for_ai(soup: BeautifulSoup) -> BeautifulSoup:
+def _prerender_complex_nodes(soup: BeautifulSoup) -> BeautifulSoup:
     """
-    Finds complex text nodes and splits them into simpler ones for easier AI processing.
-    This makes the AI's job more reliable by simplifying its input.
+    Finds and directly replaces or splits complex text nodes to simplify the AI's task.
+    This is a robust, deterministic solution to issues the AI struggles with.
     """
-    logger.info("Pre-processing HTML to simplify complex text nodes...")
+    logger.info("Pre-processing/rendering complex nodes with programmatic logic...")
 
-    # Regex for skills lines (e.g., "Label : Value1, Value2")
-    # This captures a label ending in a colon and the value that follows.
+    # Define regex patterns
+    initials_regex = re.compile(r"^\s*[A-Z]{2,3}\s*$")
+    mission_regex = re.compile(r"^\s*Mission\s+au\s+sein\s+de\s+(.*)", re.I)
+    header_regex = re.compile(r"(\d+\s+ans\s+d['’]expérience)\s*(.*)")
+    # This general skills regex will handle "Langues : ..." as well as others
     skills_regex = re.compile(r"^\s*([a-zA-Z\s&/]+?)\s*:\s*(.*)")
 
-    # Regex for the complex header line (e.g., "16 ans d’expérience Mission...")
-    header_regex = re.compile(r"(\d+\s+ans\s+d['’]expérience)\s*(Mission\s+au\s+sein\s+de\s+.*)")
-
-    # We must iterate over a static list of nodes, because we are modifying the tree in-place
     for text_node in list(soup.find_all(string=True)):
         if not text_node.strip() or isinstance(text_node.parent, (BeautifulSoup, NavigableString)) or text_node.parent.name in ['style', 'script']:
             continue
 
-        original_text = str(text_node)
+        original_text = str(text_node).strip()
 
-        # Case 1: Split skills lines
-        match = skills_regex.match(original_text)
-        if match:
-            label, value = match.groups()
+        # 1. Replace Initials (full replacement)
+        if initials_regex.match(original_text):
+            new_tag = soup.new_tag("span")
+            new_tag.string = "{{ candidate.initials }}"
+            text_node.replace_with(new_tag)
+            logger.debug(f"Pre-rendered initials for: '{original_text}'")
+            continue
+
+        # 2. Replace Mission line (full replacement)
+        mission_match = mission_regex.match(original_text)
+        if mission_match:
+            new_tag = soup.new_tag("span")
+            new_tag.string = "Mission au sein de {{ experience[0].company }}"
+            text_node.replace_with(new_tag)
+            logger.debug(f"Pre-rendered mission line: '{original_text}'")
+            continue
+
+        # 3. Split header line
+        header_match = header_regex.match(original_text)
+        if header_match:
+            experience_part, other_part = header_match.groups()
+            if other_part.strip(): # Only split if there is other text
+                experience_tag = soup.new_tag("span")
+                experience_tag.string = experience_part.strip()
+
+                other_tag = soup.new_tag("span")
+                other_tag.string = other_part.strip()
+
+                text_node.replace_with(experience_tag)
+                experience_tag.insert_after(other_tag)
+                logger.debug(f"Split header line: '{original_text}'")
+                continue
+
+        # 4. Split all skills lines (e.g., "Label : Value") into two separate nodes
+        skills_match = skills_regex.match(original_text)
+        if skills_match:
+            label, value = skills_match.groups()
             if value.strip():
-                # Create new sibling tags for the static label and the dynamic value
                 label_tag = soup.new_tag("span")
                 label_tag.string = f"{label.strip()} :"
 
                 value_tag = soup.new_tag("span")
                 value_tag.string = value.strip()
 
-                # Replace the original single text node with two new element nodes
                 text_node.replace_with(label_tag)
                 label_tag.insert_after(value_tag)
                 logger.debug(f"Split skills line: '{original_text}'")
-                continue # Node has been replaced, move to the next one
-
-        # Case 2: Split complex header line
-        match = header_regex.match(original_text)
-        if match:
-            experience_part, mission_part = match.groups()
-
-            experience_tag = soup.new_tag("span")
-            experience_tag.string = experience_part.strip()
-
-            mission_tag = soup.new_tag("span")
-            mission_tag.string = mission_part.strip()
-
-            text_node.replace_with(experience_tag)
-            experience_tag.insert_after(mission_tag)
-            logger.debug(f"Split header line: '{original_text}'")
+                continue
 
     return soup
 
@@ -218,11 +233,11 @@ def inject_liquid_placeholders(html_content: str) -> str:
     logger.info("Parsing HTML and preparing for AI injection...")
     soup = BeautifulSoup(html_content, "html.parser")
 
-    # --- NEW: Pre-process the HTML to split complex nodes into simpler ones ---
-    soup = _preprocess_html_for_ai(soup)
-    # -------------------------------------------------------------------------
+    # --- NEW: Pre-render complex nodes to handle them programmatically ---
+    soup = _prerender_complex_nodes(soup)
+    # -------------------------------------------------------------------
 
-    # 1. Add unique IDs to all text nodes and create an ID-to-text map
+    # 1. Add unique IDs to all REMAINING text nodes and create an ID-to-text map
     id_to_text_map = {}
     node_counter = 0
     for text_node in soup.find_all(string=True):
