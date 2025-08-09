@@ -62,19 +62,6 @@ Your task:
 - Preserve arrays: for repeating blocks, assume index `i` (and `j` for tasks). If you suspect a repeating row, map consistently using `experience[i]` etc.
 - If a field is dynamic but its content may be absent (e.g., end date, context, URL), still map it (the rendering engine can handle null/empty).
 
-### Special Header Rules
-- Text in the document header (near the candidate's name) often contains the current job title and company. These require special mapping.
-- The job title in the header (e.g., "Ingénieure en informatique") MUST be mapped to `{{{{ experience[0].title }}}}`.
-- Text containing "Mission au sein de..." should be parsed for the company name, and that company name MUST be mapped to `{{{{ experience[0].company }}}}`.
-
-### Special Skills Rules
-- The "Compétences techniques et fonctionnelles" section lists skills. The text following these category labels MUST be mapped to the correct `skills` placeholders.
-- Map text after 'Langages & Frontend' to `{{{{ skills.languages }}}}`.
-- Map text after 'Backend & Frameworks' to `{{{{ skills.frameworks }}}}`.
-- Map text after 'Bases de données & Cache' to `{{{{ skills.databases }}}}`.
-- Map text after 'DevOps & Cloud' to `{{{{ skills.cloud }}}}`.
-- Map text after 'CI/CD & Outils' to `{{{{ skills.tools }}}}`.
-
 ### Inputs
 id_to_text_map:
 {ID_TO_TEXT_MAP}
@@ -110,11 +97,6 @@ REGEX_CORE: Dict[str, List[re.Pattern]] = {
     # Candidate initials
     "initials": [
         re.compile(r"^\s*[A-Z]{2,3}\s*$")
-    ],
-
-    # Languages
-    "languages": [
-        re.compile(r"^\s*langues\b.*", re.I)
     ],
 
     # Job title courant – mots fréquents

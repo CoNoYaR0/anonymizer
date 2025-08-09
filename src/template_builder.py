@@ -6,6 +6,7 @@ import sys
 import base64
 import json
 import logging
+import re
 from typing import Optional, Dict
 from dotenv import load_dotenv
 
@@ -150,6 +151,63 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
         raise Exception("Failed to decode JSON from AI response.")
 
 
+def _preprocess_html_for_ai(soup: BeautifulSoup) -> BeautifulSoup:
+    """
+    Finds complex text nodes and splits them into simpler ones for easier AI processing.
+    This makes the AI's job more reliable by simplifying its input.
+    """
+    logger.info("Pre-processing HTML to simplify complex text nodes...")
+
+    # Regex for skills lines (e.g., "Label : Value1, Value2")
+    # This captures a label ending in a colon and the value that follows.
+    skills_regex = re.compile(r"^\s*([a-zA-Z\s&/]+?)\s*:\s*(.*)")
+
+    # Regex for the complex header line (e.g., "16 ans d’expérience Mission...")
+    header_regex = re.compile(r"(\d+\s+ans\s+d['’]expérience)\s*(Mission\s+au\s+sein\s+de\s+.*)")
+
+    # We must iterate over a static list of nodes, because we are modifying the tree in-place
+    for text_node in list(soup.find_all(string=True)):
+        if not text_node.strip() or isinstance(text_node.parent, (BeautifulSoup, NavigableString)) or text_node.parent.name in ['style', 'script']:
+            continue
+
+        original_text = str(text_node)
+
+        # Case 1: Split skills lines
+        match = skills_regex.match(original_text)
+        if match:
+            label, value = match.groups()
+            if value.strip():
+                # Create new sibling tags for the static label and the dynamic value
+                label_tag = soup.new_tag("span")
+                label_tag.string = f"{label.strip()} :"
+
+                value_tag = soup.new_tag("span")
+                value_tag.string = value.strip()
+
+                # Replace the original single text node with two new element nodes
+                text_node.replace_with(label_tag)
+                label_tag.insert_after(value_tag)
+                logger.debug(f"Split skills line: '{original_text}'")
+                continue # Node has been replaced, move to the next one
+
+        # Case 2: Split complex header line
+        match = header_regex.match(original_text)
+        if match:
+            experience_part, mission_part = match.groups()
+
+            experience_tag = soup.new_tag("span")
+            experience_tag.string = experience_part.strip()
+
+            mission_tag = soup.new_tag("span")
+            mission_tag.string = mission_part.strip()
+
+            text_node.replace_with(experience_tag)
+            experience_tag.insert_after(mission_tag)
+            logger.debug(f"Split header line: '{original_text}'")
+
+    return soup
+
+
 def inject_liquid_placeholders(html_content: str) -> str:
     """
     Uses a token-efficient, ID-based hybrid approach to inject Liquid placeholders.
@@ -159,6 +217,10 @@ def inject_liquid_placeholders(html_content: str) -> str:
 
     logger.info("Parsing HTML and preparing for AI injection...")
     soup = BeautifulSoup(html_content, "html.parser")
+
+    # --- NEW: Pre-process the HTML to split complex nodes into simpler ones ---
+    soup = _preprocess_html_for_ai(soup)
+    # -------------------------------------------------------------------------
 
     # 1. Add unique IDs to all text nodes and create an ID-to-text map
     id_to_text_map = {}
