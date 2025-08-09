@@ -6,7 +6,6 @@ import sys
 import base64
 import json
 import logging
-import re
 from typing import Optional, Dict
 from dotenv import load_dotenv
 
@@ -144,72 +143,6 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
         raise Exception("Failed to decode JSON from AI response.")
 
 
-def _preprocess_html_for_ai(soup: BeautifulSoup) -> BeautifulSoup:
-    """
-    Finds complex text nodes and splits them into simpler ones for easier AI processing.
-    This is a robust, deterministic solution that simplifies the AI's task.
-    """
-    logger.info("Pre-processing HTML to simplify complex text nodes...")
-
-    # Define regex patterns for nodes that need splitting
-    # This will handle all "Label : Value" lines, including skills and languages
-    split_regex = re.compile(r"^\s*([a-zA-Z\s&/]+?)\s*:\s*(.*)")
-
-    # This will handle the header line specifically
-    header_regex = re.compile(r"(\d+\s+ans\s+d['’]expérience)\s*(.*)")
-
-    # This will handle initials to isolate them
-    initials_regex = re.compile(r"^\s*([A-Z]{2,3})\s*$")
-
-    for text_node in list(soup.find_all(string=True)):
-        if not text_node.strip() or isinstance(text_node.parent, (BeautifulSoup, NavigableString)) or text_node.parent.name in ['style', 'script']:
-            continue
-
-        original_text = str(text_node).strip()
-
-        # Case 1: Split the header line
-        match = header_regex.match(original_text)
-        if match:
-            part1, part2 = match.groups()
-            if part2.strip():
-                tag1 = soup.new_tag("span")
-                tag1.string = part1.strip()
-
-                tag2 = soup.new_tag("span")
-                tag2.string = part2.strip()
-
-                text_node.replace_with(tag1)
-                tag1.insert_after(tag2)
-                logger.debug(f"Split header line: '{original_text}'")
-                continue
-
-        # Case 2: Split all "Label : Value" lines
-        match = split_regex.match(original_text)
-        if match:
-            label, value = match.groups()
-            if value.strip():
-                label_tag = soup.new_tag("span")
-                label_tag.string = f"{label.strip()} :"
-
-                value_tag = soup.new_tag("span")
-                value_tag.string = value.strip()
-
-                text_node.replace_with(label_tag)
-                label_tag.insert_after(value_tag)
-                logger.debug(f"Split skills/generic line: '{original_text}'")
-                continue
-
-        # Case 3: Isolate initials in their own tag if they are part of a larger text node
-        # This is a bit more complex, for now we assume initials are already isolated.
-        # A simple regex match on the whole node is sufficient if it's already separate.
-        if initials_regex.match(original_text):
-            # If the node is just the initials, we don't need to do anything,
-            # the AI will handle it with the help of the `initials` regex classifier.
-            pass
-
-    return soup
-
-
 def inject_liquid_placeholders(html_content: str) -> str:
     """
     Uses a token-efficient, ID-based hybrid approach to inject Liquid placeholders.
@@ -219,10 +152,6 @@ def inject_liquid_placeholders(html_content: str) -> str:
 
     logger.info("Parsing HTML and preparing for AI injection...")
     soup = BeautifulSoup(html_content, "html.parser")
-
-    # --- NEW: Pre-process the HTML to split complex nodes into simpler ones ---
-    soup = _preprocess_html_for_ai(soup)
-    # -------------------------------------------------------------------------
 
     # 1. Add unique IDs to all text nodes and create an ID-to-text map
     id_to_text_map = {}
