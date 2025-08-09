@@ -19,45 +19,25 @@ from typing import Dict
 PROMPT_GPT4 = """\
 You are a templating expert. Your task is to map re-assembled, coherent lines of text from a CV to their corresponding Liquid placeholders.
 
-You will receive a JSON object where each key is a unique `block-id` and the value is the clean text content from that block.
+You will receive a JSON object where each key is a unique `block-id` from the document, and the value is the clean, coherent text content from that block. The text has been pre-processed to fix fragmentation issues.
 
 Your task:
 - Analyze the text for each `block-id`.
 - Produce a JSON object mapping the `block-id` to its correct Liquid placeholder.
 - **Only include IDs for dynamic values.** Exclude any text that is a static label (e.g., "Experience", "Education", "Missions :", etc.).
-- The text has been pre-processed. Trust that each value is a single, coherent piece of information.
-- For a line like "WSN Ingénieure en informatique 16 ans d’expérience Mission au sein de TeamWill Consulting", you must extract all placeholders.
+- If a single line of text contains multiple dynamic values, you MUST combine them. For example, for a block with text "WSN Ingénieure en informatique 16 ans d’expérience", your output for that block's ID should be "{{ candidate.initials }} {{ candidate.current_job.title }} {{ candidate.years_of_experience }}".
 
 ### Rules & Conventions
 - Keep keys identical to the input IDs.
-- Use consistent Liquid paths:
-  - Candidate Info:
-    - Full name → `{{ candidate.full_name }}`
-    - Initials → `{{ candidate.initials }}`
-    - Job title → `{{ candidate.current_job.title }}`
-    - Company → `{{ candidate.current_job.company }}`
-    - Years of experience → `{{ candidate.years_of_experience }}`
-  - Experience Section:
-    - Title → `{{ experience[i].title }}`
-    - Company → `{{ experience[i].company }}`
-    - Dates → `{{ experience[i].dates }}`
-    - Context → `{{ experience[i].context }}`
-    - Tasks/Missions → `{{ experience[i].tasks[j] }}`
-    - Technologies → `{{ experience[i].technologies }}`
-  - Education Section:
-    - Degree/Title → `{{ education[i].degree }}`
-    - School/Issuer → `{{ education[i].school }}`
-    - Dates → `{{ education[i].date }}`
-  - Skills Section:
-    - For a line of skills like "HTML5, CSS, Typescript, Angular", map the entire line to the appropriate placeholder, e.g., `{{ skills.languages }}` or `{{ skills.frameworks }}`.
-- Preserve arrays: for repeating blocks (like jobs or tasks), assume index `i` or `j`.
+- Use consistent Liquid paths. The main categories are `candidate`, `experience[i]`, `education[i]`, and `skills`.
+- The first job title and company listed are usually the current ones (`candidate.current_job`).
+- For repeating items like jobs or tasks, use the correct index `[i]` or `[j]`.
 
 ### Input Data
 {TEXT_BLOCKS}
 
 ### Output
 Return ONLY the final JSON mapping: `{{ "block-id": "Liquid placeholder" }}`.
-If a single block contains multiple placeholders, combine them. For example, for "16 ans d’expérience chez Acme", the output for that block should be `{{ candidate.years_of_experience }} chez {{ experience[0].company }}`.
 """
 
 def build_prompt(text_blocks: Dict[str, str]) -> str:
