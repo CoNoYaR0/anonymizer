@@ -67,6 +67,14 @@ Your task:
 - The job title in the header (e.g., "Ingénieure en informatique") MUST be mapped to `{{{{ experience[0].title }}}}`.
 - Text containing "Mission au sein de..." should be parsed for the company name, and that company name MUST be mapped to `{{{{ experience[0].company }}}}`.
 
+### Special Skills Rules
+- The "Compétences techniques et fonctionnelles" section lists skills. The text following these category labels MUST be mapped to the correct `skills` placeholders.
+- Map text after 'Langages & Frontend' to `{{{{ skills.languages }}}}`.
+- Map text after 'Backend & Frameworks' to `{{{{ skills.frameworks }}}}`.
+- Map text after 'Bases de données & Cache' to `{{{{ skills.databases }}}}`.
+- Map text after 'DevOps & Cloud' to `{{{{ skills.cloud }}}}`.
+- Map text after 'CI/CD & Outils' to `{{{{ skills.tools }}}}`.
+
 ### Inputs
 id_to_text_map:
 {ID_TO_TEXT_MAP}
