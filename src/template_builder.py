@@ -108,34 +108,89 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
         raise e
 
 
-def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
+def _contextual_preprocess_and_get_map(soup: BeautifulSoup) -> Dict[str, Dict[str, str]]:
     """
-    Generates a map of ID-to-Liquid-placeholders using the new GPT-5 workflow.
+    The core of the new robust solution. This function iterates through the HTML,
+    determines the context (section) of each text node, pre-processes complex
+    nodes, and builds a context-rich map for the AI.
     """
-    logger.info("Starting AI placeholder mapping workflow...")
+    logger.info("Starting contextual pre-processing...")
+    context_map = {}
+    node_counter = 0
+    current_section = "header"  # Assume content starts in the header
 
-    # 1. Annotate the text map using local regex-based classification
-    logger.info("Step 1/3: Annotating text map with regex classifiers...")
-    annotations = ai_logic.annotate_map(id_to_text_map)
-    logger.debug(f"Generated annotations: {json.dumps(annotations, ensure_ascii=False, indent=2)}")
+    # Define keywords that signal a change in section
+    section_keywords = {
+        "COMPÉTENCES TECHNIQUES ET FONCTIONNELLES": "skills",
+        "EXPÉRIENCES PROFESSIONNELLES": "experience",
+        "Formation et Certifications": "education"
+    }
 
-    # 2. Build the detailed prompt for the new model
-    logger.info("Step 2/3: Building prompt for GPT-5...")
-    prompt = ai_logic.build_prompt(id_to_text_map, annotations)
-    logger.debug(f"Generated prompt: {prompt}")
+    # Define regex for splitting "Label: Value" lines
+    split_regex = re.compile(r"^\s*([a-zA-Z\s&/]+?)\s*:\s*(.*)")
 
-    # 3. Call the new model
-    logger.info("Step 3/3: Calling GPT-5 API to get placeholder map...")
+    for element in soup.find_all(string=True):
+        if not element.strip() or isinstance(element.parent, (BeautifulSoup, NavigableString)) or element.parent.name in ['style', 'script']:
+            continue
+
+        text = element.strip()
+
+        # Update current section based on keywords
+        for keyword, section_name in section_keywords.items():
+            if keyword.lower() in text.lower():
+                current_section = section_name
+                break
+
+        # Pre-process "Label: Value" lines by splitting them
+        match = split_regex.match(text)
+        if match:
+            label, value = match.groups()
+            if value.strip():
+                # The label itself is static, so we don't add it to the map
+                # We replace the original node with just the value node
+                value_node = NavigableString(value.strip())
+                element.replace_with(value_node)
+                element = value_node # Continue processing on the new node
+                text = value.strip()
+                logger.debug(f"Split line in section '{current_section}': kept value '{text}'")
+
+        # Add the processed text and its context to our map
+        node_id = f"liquid-node-{node_counter}"
+        context_map[node_id] = {
+            "text": text,
+            "section": current_section
+        }
+
+        # Tag the parent element with the ID
+        parent_tag = element.parent
+        if parent_tag:
+            parent_tag[f"data-liquid-id"] = node_id
+
+        node_counter += 1
+
+    return context_map
+
+
+def _get_ai_replacement_map(context_map: Dict[str, Dict[str, str]]) -> Dict[str, str]:
+    """
+    Generates a map of ID-to-Liquid-placeholders using the new context-rich map.
+    """
+    logger.info("Starting AI placeholder mapping workflow with context...")
+
+    # The prompt will need to be updated in ai_logic.py to handle this new structure
+    prompt = ai_logic.build_prompt(context_map)
+
+    logger.info("Calling OpenAI API with context-rich data...")
     client = OpenAI(api_key=OPENAI_API_KEY)
     response = client.chat.completions.create(
-        model="gpt-4o",  # Switched to a compatible model
+        model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
-        temperature=0.0  # Set to 0 for deterministic, repeatable outputs
+        temperature=0.0
     )
 
     response_content = response.choices[0].message.content
-    logger.debug(f"GPT-5 response: {response_content}")
+    logger.debug(f"GPT-4o response: {response_content}")
 
     try:
         return json.loads(response_content)
@@ -146,7 +201,7 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
 
 def inject_liquid_placeholders(html_content: str) -> str:
     """
-    Uses a token-efficient, ID-based hybrid approach to inject Liquid placeholders.
+    Uses a context-aware, programmatic pre-processing approach to inject placeholders.
     """
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is not set.")
@@ -154,29 +209,21 @@ def inject_liquid_placeholders(html_content: str) -> str:
     logger.info("Parsing HTML and preparing for AI injection...")
     soup = BeautifulSoup(html_content, "html.parser")
 
-    # 1. Add unique IDs to all text nodes and create an ID-to-text map
-    id_to_text_map = {}
-    node_counter = 0
-    for text_node in soup.find_all(string=True):
-        if text_node.strip() and not isinstance(text_node.parent, (BeautifulSoup, NavigableString)) and text_node.parent.name not in ['style', 'script']:
-            node_id = f"liquid-node-{node_counter}"
-            id_to_text_map[node_id] = text_node.strip()
-            text_node.parent[f"data-liquid-id"] = node_id
-            node_counter += 1
+    # 1. Pre-process the HTML and get the context-rich map
+    context_map = _contextual_preprocess_and_get_map(soup)
 
-    if not id_to_text_map:
-        logger.warning("No text nodes found to process in inject_liquid_placeholders.")
+    if not context_map:
+        logger.warning("No text nodes found to process.")
         return str(soup)
 
-    # 2. Get the replacement map from the AI
-    id_to_liquid_map = _get_ai_replacement_map(id_to_text_map)
+    # 2. Get the replacement map from the AI using the new context map
+    id_to_liquid_map = _get_ai_replacement_map(context_map)
 
     # 3. Replace content and remove IDs
     logger.info("Replacing content with Liquid placeholders...")
     for node_id, liquid_variable in id_to_liquid_map.items():
         element = soup.find(attrs={f"data-liquid-id": node_id})
         if element:
-            # Clear the element and add the new Liquid variable
             element.clear()
             element.append(NavigableString(liquid_variable))
 
