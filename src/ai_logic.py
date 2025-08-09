@@ -94,6 +94,11 @@ REGEX_CORE: Dict[str, List[re.Pattern]] = {
         re.compile(r"^[A-ZÉÈÀÂÎ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+(?:\s+[A-ZÉÈÀÂÎ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+){1,3}$")
     ],
 
+    # Candidate initials
+    "initials": [
+        re.compile(r"^\s*[A-Z]{2,3}\s*$")
+    ],
+
     # Job title courant – mots fréquents
     "job_title": [
         re.compile(r"\b(lead|senior|jr\.?|junior|staff|principal|architect|manager|engineer|developer|développeur|ingénieur|devops|ml|data|product|designer|cto|cto|cpo)\b", re.I),
@@ -178,8 +183,8 @@ def classify_text(txt: str) -> List[str]:
         for p in patterns:
             if p.search(txt_norm):
                 labels.append(label)
-                break  # évite la redondance intra-catégorie
-    return labels
+                # The break is removed to allow multiple labels per text node
+    return list(set(labels))  # Return unique labels
 
 
 def annotate_map(id_to_text_map: Dict[str, str]) -> Dict[str, Any]:
