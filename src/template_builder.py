@@ -130,7 +130,8 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
     response = client.chat.completions.create(
         model="gpt-5",  # Switched to the new model
         messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"}
+        response_format={"type": "json_object"},
+        temperature=0.0  # Set to 0 for deterministic, repeatable outputs
     )
 
     response_content = response.choices[0].message.content
