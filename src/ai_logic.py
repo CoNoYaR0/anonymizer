@@ -94,11 +94,6 @@ REGEX_CORE: Dict[str, List[re.Pattern]] = {
         re.compile(r"^[A-ZÉÈÀÂÎ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+(?:\s+[A-ZÉÈÀÂÎ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+){1,3}$")
     ],
 
-    # Candidate initials
-    "initials": [
-        re.compile(r"^\s*[A-Z]{2,3}\s*$")
-    ],
-
     # Job title courant – mots fréquents
     "job_title": [
         re.compile(r"\b(lead|senior|jr\.?|junior|staff|principal|architect|manager|engineer|developer|développeur|ingénieur|devops|ml|data|product|designer|cto|cto|cpo)\b", re.I),
@@ -138,16 +133,6 @@ REGEX_CORE: Dict[str, List[re.Pattern]] = {
     ],
     "certification": [
         re.compile(r"\b(certification|certificate|certifié|aws certified|gcp professional|azure)\b", re.I),
-    ],
-
-    # Years of experience
-    "years_of_experience": [
-        re.compile(r"\b\d+\s+ans\s+d['’]expérience\b", re.I)
-    ],
-
-    # Technologies list
-    "technologies": [
-        re.compile(r"^\s*technologies\b.*", re.I)
     ],
 
     # Labels statiques (sections) à exclure
