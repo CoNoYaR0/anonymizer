@@ -128,7 +128,7 @@ def _get_ai_replacement_map(id_to_text_map: Dict[str, str]) -> Dict[str, str]:
     logger.info("Step 3/3: Calling GPT-5 API to get placeholder map...")
     client = OpenAI(api_key=OPENAI_API_KEY)
     response = client.chat.completions.create(
-        model="gpt-5",  # Switched to the new model
+        model="gpt-4o",  # Switched to a compatible model
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
         temperature=0.0  # Set to 0 for deterministic, repeatable outputs
