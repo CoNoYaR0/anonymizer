@@ -6,7 +6,6 @@ import sys
 import base64
 import json
 import logging
-import re
 from typing import Optional, Dict
 from dotenv import load_dotenv
 
@@ -109,79 +108,16 @@ def convert_docx_to_html_and_cache(file_content: bytes) -> str:
         raise e
 
 
-def _contextual_preprocess_and_get_map(soup: BeautifulSoup) -> Dict[str, Dict[str, str]]:
+def _get_ai_replacement_map(text_blocks: Dict[str, str]) -> Dict[str, str]:
     """
-    The core of the new robust solution. This function iterates through the HTML,
-    determines the context (section) of each text node, pre-processes complex
-    nodes, and builds a context-rich map for the AI.
+    Generates a map of ID-to-Liquid-placeholders using a simplified text map.
+    The AI's job is now much easier as the text has been re-assembled.
     """
-    logger.info("Starting contextual pre-processing...")
-    context_map = {}
-    node_counter = 0
-    current_section = "header"  # Assume content starts in the header
+    logger.info("Starting AI placeholder mapping workflow...")
 
-    # Define keywords that signal a change in section
-    section_keywords = {
-        "COMPÉTENCES TECHNIQUES ET FONCTIONNELLES": "skills",
-        "EXPÉRIENCES PROFESSIONNELLES": "experience",
-        "Formation et Certifications": "education"
-    }
+    prompt = ai_logic.build_prompt(text_blocks) # Assumes ai_logic.build_prompt is updated
 
-    # Define regex for splitting "Label: Value" lines
-    split_regex = re.compile(r"^\s*([a-zA-Z\s&/]+?)\s*:\s*(.*)")
-
-    for element in soup.find_all(string=True):
-        if not element.strip() or isinstance(element.parent, (BeautifulSoup, NavigableString)) or element.parent.name in ['style', 'script']:
-            continue
-
-        text = element.strip()
-
-        # Update current section based on keywords
-        for keyword, section_name in section_keywords.items():
-            if keyword.lower() in text.lower():
-                current_section = section_name
-                break
-
-        # Pre-process "Label: Value" lines by splitting them
-        match = split_regex.match(text)
-        if match:
-            label, value = match.groups()
-            if value.strip():
-                # The label itself is static, so we don't add it to the map
-                # We replace the original node with just the value node
-                value_node = NavigableString(value.strip())
-                element.replace_with(value_node)
-                element = value_node # Continue processing on the new node
-                text = value.strip()
-                logger.debug(f"Split line in section '{current_section}': kept value '{text}'")
-
-        # Add the processed text and its context to our map
-        node_id = f"liquid-node-{node_counter}"
-        context_map[node_id] = {
-            "text": text,
-            "section": current_section
-        }
-
-        # Tag the parent element with the ID
-        parent_tag = element.parent
-        if parent_tag:
-            parent_tag[f"data-liquid-id"] = node_id
-
-        node_counter += 1
-
-    return context_map
-
-
-def _get_ai_replacement_map(context_map: Dict[str, Dict[str, str]]) -> Dict[str, str]:
-    """
-    Generates a map of ID-to-Liquid-placeholders using the new context-rich map.
-    """
-    logger.info("Starting AI placeholder mapping workflow with context...")
-
-    # The prompt will need to be updated in ai_logic.py to handle this new structure
-    prompt = ai_logic.build_prompt(context_map)
-
-    logger.info("Calling OpenAI API with context-rich data...")
+    logger.info("Calling OpenAI API with re-assembled text blocks...")
     client = OpenAI(api_key=OPENAI_API_KEY)
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -202,7 +138,8 @@ def _get_ai_replacement_map(context_map: Dict[str, Dict[str, str]]) -> Dict[str,
 
 def inject_liquid_placeholders(html_content: str) -> str:
     """
-    Uses a context-aware, programmatic pre-processing approach to inject placeholders.
+    Uses an intelligent text re-assembly approach before calling the AI.
+    This fixes the root cause of the AI's confusion: fragmented text nodes.
     """
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is not set.")
@@ -210,21 +147,32 @@ def inject_liquid_placeholders(html_content: str) -> str:
     logger.info("Parsing HTML and preparing for AI injection...")
     soup = BeautifulSoup(html_content, "html.parser")
 
-    # 1. Pre-process the HTML and get the context-rich map
-    context_map = _contextual_preprocess_and_get_map(soup)
+    # 1. Re-assemble fragmented text and build a map of block-level elements to their coherent text.
+    text_blocks = {}
+    # Find all major block-level elements that likely contain distinct pieces of content.
+    # This list can be refined based on the structure of Convertio's output.
+    for i, block in enumerate(soup.find_all(['p', 'div', 'li', 'h1', 'h2', 'h3', 'td'])):
+        # Get all text from the block, joined by spaces, and stripped of excess whitespace.
+        text = block.get_text(separator=' ', strip=True)
+        if text:
+            block_id = f"block-id-{i}"
+            text_blocks[block_id] = text
+            block['data-liquid-id'] = block_id
 
-    if not context_map:
-        logger.warning("No text nodes found to process.")
+    if not text_blocks:
+        logger.warning("No text blocks found to process.")
         return str(soup)
 
-    # 2. Get the replacement map from the AI using the new context map
-    id_to_liquid_map = _get_ai_replacement_map(context_map)
+    # 2. Get the replacement map from the AI
+    # The AI now receives a clean map of {block-id: "coherent line of text"}
+    id_to_liquid_map = _get_ai_replacement_map(text_blocks)
 
     # 3. Replace content and remove IDs
     logger.info("Replacing content with Liquid placeholders...")
-    for node_id, liquid_variable in id_to_liquid_map.items():
-        element = soup.find(attrs={f"data-liquid-id": node_id})
+    for block_id, liquid_variable in id_to_liquid_map.items():
+        element = soup.find(attrs={"data-liquid-id": block_id})
         if element:
+            # Replace the entire content of the block with the placeholder
             element.clear()
             element.append(NavigableString(liquid_variable))
 

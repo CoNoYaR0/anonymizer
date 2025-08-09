@@ -176,3 +176,29 @@ The goal of this project is to create a backend service that can take a CV in PD
         *   Refactored `src/database.py` to use a direct `DB_USER` environment variable instead of parsing the URL. This is a much cleaner and more explicit solution.
         *   Updated `.env.example` and `HOW_TO_USE.md` to reflect this simpler setup, instructing the user to copy the `DB_USER` directly from their Supabase dashboard.
 *   **Status:** The database connection logic is now both correct and simple, following best practices.
+
+### Phase 6: Collaborative Debugging & Final Solution
+*   **Date:** 2025-08-09
+*   **Objective:** To debug and resolve a series of complex, interacting issues with the AI-powered template generation, ultimately arriving at a robust, deterministic, and high-quality solution through a collaborative process.
+*   **Action: Debugging OpenAI Authentication**
+    *   **Issue:** The application was failing with a `401 Unauthorized` error from the OpenAI API.
+    *   **Investigation:**
+        *   Initial hypothesis was an incorrect API key in the `.env` file.
+        *   User confirmed the key was correct via a `curl` test, deepening the mystery.
+        *   A `grep` command revealed the incorrect key was still present in the `.env` file.
+        *   **Final Discovery (by user):** The `.env` file was set to "read-only", preventing any changes from being saved. This was the root cause of the authentication issue.
+*   **Action: Collaborative Refinement of AI Templating**
+    *   **Initial State:** The base AI logic worked for most of the document but failed on specific, complex lines (e.g., header, skills, technologies).
+    *   **Attempt 1 (AI Logic - Failure):** An attempt to fix the remaining issues by allowing multiple classifications per text node in `ai_logic.py` caused a major regression, as it confused the AI. This change was reverted.
+    *   **Attempt 2 (AI Logic - Randomness):** After reverting, it was discovered through user observation that the AI's output was non-deterministic (random), producing different results on each run.
+    *   **Attempt 3 (AI Logic - Model Incompatibility):** The standard fix for randomness (`temperature=0`) was applied. This revealed a fatal flaw in the environment: the specified `gpt-5` model did not support this parameter.
+    *   **Attempt 4 (AI Logic - Model Swap):** On the user's suggestion, the model was switched to `gpt-4o`. This fixed the randomness, but the prompt, which was tuned for `gpt-5`, produced very poor quality results with the new model.
+*   **Action: Final Architecture - Context-Aware Pre-processing**
+    *   **Reasoning (based on collaborative brainstorming):** After exhausting all simple AI logic fixes, we concluded that the root problem was asking the AI to parse overly complex text. The definitive solution was to pre-process the HTML programmatically to simplify the AI's task.
+    *   **Implementation:**
+        *   A new `_contextual_preprocess_and_get_map` function was implemented in `template_builder.py`.
+        *   This function intelligently determines the document "section" for each piece of text (header, skills, etc.).
+        *   It also programmatically splits complex "Label: Value" lines into separate, simple nodes.
+        *   The prompt in `ai_logic.py` was upgraded to use this new contextual information, making the AI's job easier and its results more accurate.
+        *   A final bug (`NameError: 're' not defined`) was caught and fixed by adding the required import.
+*   **Status:** The template generation workflow is now stable, deterministic, and produces high-quality results. The collaborative debugging process has resulted in a significantly more robust and intelligent architecture.
