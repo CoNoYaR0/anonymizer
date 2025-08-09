@@ -37,6 +37,7 @@ Your task:
         (Calcul will be handled outside the template; just map to `candidate.initials`.)
     - Current job title → `{{{{ candidate.current_job.title }}}}`
     - Current company → `{{{{ candidate.current_job.company }}}}`
+    - Years of experience → `{{{{ candidate.years_of_experience }}}}`
     - Location → `{{{{ candidate.location }}}}`
     - Email → `{{{{ candidate.email }}}}`, Phone → `{{{{ candidate.phone }}}}`
   - Experience (array, order preserved top→down):
@@ -45,6 +46,7 @@ Your task:
     - Date start/end → `{{{{ experience[i].date_start }}}}`, `{{{{ experience[i].date_end }}}}` (if missing end, omit the ID or map to `null`)
     - Context (optional) → `{{{{ experience[i].context }}}}`
     - Missions / tasks (0..N) → `{{{{ experience[i].tasks[j] }}}}`
+    - Technologies → `{{{{ experience[i].technologies }}}}`
   - Education & certifications (arrays):
     - School / center → `{{{{ education[i].school }}}}` / `{{{{ certifications[i].issuer }}}}`
     - Degree / title → `{{{{ education[i].degree }}}}` / `{{{{ certifications[i].title }}}}`
@@ -131,6 +133,16 @@ REGEX_CORE: Dict[str, List[re.Pattern]] = {
     ],
     "certification": [
         re.compile(r"\b(certification|certificate|certifié|aws certified|gcp professional|azure)\b", re.I),
+    ],
+
+    # Years of experience
+    "years_of_experience": [
+        re.compile(r"\b\d+\s+ans\s+d['’]expérience\b", re.I)
+    ],
+
+    # Technologies list
+    "technologies": [
+        re.compile(r"^\s*technologies\b.*", re.I)
     ],
 
     # Labels statiques (sections) à exclure

@@ -22,6 +22,13 @@ from . import ai_logic
 load_dotenv()
 CONVERTIO_API_KEY = os.getenv("CONVERTIO_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# --- Debugging: Log the loaded API key securely ---
+if OPENAI_API_KEY:
+    logger.info(f"Loaded OpenAI API Key ending with: ...{OPENAI_API_KEY[-4:]}")
+else:
+    logger.warning("OPENAI_API_KEY environment variable not found or is empty.")
+# -------------------------------------------------
 # ... (_calculate_file_hash and convert_docx_to_html_and_cache are unchanged)
 def _calculate_file_hash(file_content: bytes) -> str:
     """Calculates the SHA-256 hash of the file content."""
