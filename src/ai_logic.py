@@ -37,7 +37,6 @@ Your task:
         (Calcul will be handled outside the template; just map to `candidate.initials`.)
     - Current job title → `{{{{ candidate.current_job.title }}}}`
     - Current company → `{{{{ candidate.current_job.company }}}}`
-    - Years of experience → `{{{{ candidate.years_of_experience }}}}`
     - Location → `{{{{ candidate.location }}}}`
     - Email → `{{{{ candidate.email }}}}`, Phone → `{{{{ candidate.phone }}}}`
   - Experience (array, order preserved top→down):
@@ -46,7 +45,6 @@ Your task:
     - Date start/end → `{{{{ experience[i].date_start }}}}`, `{{{{ experience[i].date_end }}}}` (if missing end, omit the ID or map to `null`)
     - Context (optional) → `{{{{ experience[i].context }}}}`
     - Missions / tasks (0..N) → `{{{{ experience[i].tasks[j] }}}}`
-    - Technologies → `{{{{ experience[i].technologies }}}}`
   - Education & certifications (arrays):
     - School / center → `{{{{ education[i].school }}}}` / `{{{{ certifications[i].issuer }}}}`
     - Degree / title → `{{{{ education[i].degree }}}}` / `{{{{ certifications[i].title }}}}`
@@ -92,6 +90,11 @@ REGEX_CORE: Dict[str, List[re.Pattern]] = {
     # Noms complets (prénom nom / nom prénom) – large filet
     "full_name": [
         re.compile(r"^[A-ZÉÈÀÂÎ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+(?:\s+[A-ZÉÈÀÂÎ][a-zA-ZÀ-ÖØ-öø-ÿ'’\-]+){1,3}$")
+    ],
+
+    # Candidate initials
+    "initials": [
+        re.compile(r"^\s*[A-Z]{2,3}\s*$")
     ],
 
     # Job title courant – mots fréquents
