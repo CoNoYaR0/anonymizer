@@ -6,6 +6,7 @@ import sys
 import base64
 import json
 import logging
+import re
 from typing import Optional, Dict
 from dotenv import load_dotenv
 
